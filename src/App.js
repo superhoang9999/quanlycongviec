@@ -157,6 +157,9 @@ export default function App() {
   const [userFormData, setUserFormData] = useState({
     username: '', password: '', role: 'Thành viên', fullName: '', nhom: 'Khác'
   });
+  
+  // State Đổi mật khẩu
+  const [passwordForm, setPasswordForm] = useState({ current: '', new: '', confirm: '' });
 
   // State Chế độ xem (Cá nhân / Nhóm)
   const [viewMode, setViewMode] = useState('personal'); 
@@ -481,6 +484,38 @@ export default function App() {
         catch (error) { console.error("Lỗi xóa user:", error); }
       }
     });
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (passwordForm.current !== currentUser.password) {
+      customAlert("Mật khẩu hiện tại không đúng!");
+      return;
+    }
+    if (passwordForm.new !== passwordForm.confirm) {
+      customAlert("Mật khẩu xác nhận không khớp!");
+      return;
+    }
+
+    const updatedUser = { ...currentUser, password: passwordForm.new };
+    
+    // Cập nhật thay đổi lên giao diện
+    setCurrentUser(updatedUser);
+    setUsersList(usersList.map(u => u.id === updatedUser.id ? updatedUser : u));
+    setPasswordForm({ current: '', new: '', confirm: '' });
+    
+    customAlert("Đổi mật khẩu thành công! Hãy ghi nhớ mật khẩu mới cho lần đăng nhập sau.");
+
+    // Gửi dữ liệu mật khẩu mới lên Google Sheets
+    if (sheetUrl) {
+      try {
+        await fetch(sheetUrl, { 
+          method: 'POST', 
+          mode: 'no-cors', 
+          body: JSON.stringify({ action: 'update', sheetName: 'Users', ...updatedUser }) 
+        });
+      } catch (error) { console.error("Lỗi khi cập nhật mật khẩu:", error); }
+    }
   };
 
   const handleOpenGroupForm = (groupName = null) => {
@@ -1063,6 +1098,37 @@ export default function App() {
               <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-6">{isAdmin ? 'Cài đặt Hệ thống' : 'Cài đặt Ứng dụng'}</h2>
               <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-2' : 'max-w-xl'} gap-6`}>
                 
+                {/* Panel Đổi mật khẩu */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="bg-green-100 p-2 rounded-lg text-green-600"><Key className="w-6 h-6"/></div>
+                    <h3 className="text-lg font-bold text-gray-800">Đổi mật khẩu</h3>
+                  </div>
+                  {currentUser.id === 'admin_core' ? (
+                    <div className="p-4 bg-amber-50 text-amber-800 rounded-xl text-sm border border-amber-200 font-medium">
+                      Tài khoản Admin mặc định không thể đổi mật khẩu tại đây.
+                    </div>
+                  ) : (
+                    <form onSubmit={handleChangePassword} className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1.5">Mật khẩu hiện tại</label>
+                        <input type="password" required value={passwordForm.current} onChange={e => setPasswordForm({...passwordForm, current: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm shadow-sm" placeholder="Nhập mật khẩu đang dùng" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1.5">Mật khẩu mới</label>
+                        <input type="password" required value={passwordForm.new} onChange={e => setPasswordForm({...passwordForm, new: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm shadow-sm" placeholder="Nhập mật khẩu mới" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1.5">Xác nhận mật khẩu mới</label>
+                        <input type="password" required value={passwordForm.confirm} onChange={e => setPasswordForm({...passwordForm, confirm: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm shadow-sm" placeholder="Nhập lại mật khẩu mới" />
+                      </div>
+                      <button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-4 rounded-xl transition-colors shadow-sm text-sm mt-2">
+                        Cập nhật mật khẩu
+                      </button>
+                    </form>
+                  )}
+                </div>
+
                 {/* Panel Icon & PWA */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                   <div className="flex items-center space-x-3 mb-4">
