@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, 
   ListTodo, 
@@ -164,6 +164,13 @@ export default function App() {
   // Google Sheets & Cài đặt App
   const [sheetUrl, setSheetUrl] = useState('https://script.google.com/macros/s/AKfycbyWQbg_Rq8lSTUdEHZNB0rCSNE_0iR87hrmFVztnqeSfQlWzUzJOv14RRUq39do2sOdNw/exec');
   const [isSyncing, setIsSyncing] = useState(false);
+  
+  // Ref để lưu trữ danh sách ID công việc cũ (Dùng để so sánh tìm ra việc mới)
+  const prevTaskIdsRef = useRef(new Set());
+  
+  // Ref để lấy user hiện tại chuẩn xác nhất trong các hàm chạy ngầm
+  const currentUserRef = useRef(currentUser);
+  useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
 
   // --- STATE DIALOG TÙY CHỈNH ---
   const [dialog, setDialog] = useState({ isOpen: false, type: 'alert', message: '', onConfirm: null });
@@ -556,7 +563,35 @@ export default function App() {
                 nhom: row['Nhóm'] || 'Khác'
               };
             });
-          if (fetchedTasks.length > 0) setTasks(fetchedTasks);
+
+          if (fetchedTasks.length > 0) {
+             // --- BẮT ĐẦU LOGIC THÔNG BÁO PUSH ---
+             const currentUserNow = currentUserRef.current;
+             // Chỉ thông báo nếu không phải lần tải trang đầu tiên và đã được cấp quyền
+             if (prevTaskIdsRef.current.size > 0 && Notification.permission === "granted" && currentUserNow) {
+               const newTasks = fetchedTasks.filter(t => !prevTaskIdsRef.current.has(t.id));
+               
+               newTasks.forEach(task => {
+                 const assignees = task.nguoiPhuTrach ? task.nguoiPhuTrach.split(',').map(s => s.trim().toLowerCase()) : [];
+                 const myName = currentUserNow.fullName.toLowerCase();
+                 const myUsername = currentUserNow.username.toLowerCase();
+                 
+                 // Nếu công việc mới này có tên của mình trong danh sách phụ trách
+                 if (assignees.includes(myName) || assignees.includes(myUsername)) {
+                   new Notification("Bạn có công việc mới được phân công!", {
+                     body: task.noiDung,
+                     icon: APP_ICON_URL,
+                     vibrate: [200, 100, 200] // Rung trên điện thoại nếu hỗ trợ
+                   });
+                 }
+               });
+             }
+             // Cập nhật lại danh sách ID để làm mốc cho lần đồng bộ sau
+             prevTaskIdsRef.current = new Set(fetchedTasks.map(t => t.id));
+             // --- KẾT THÚC LOGIC THÔNG BÁO PUSH ---
+
+             setTasks(fetchedTasks);
+          }
         }
 
         if (result.users) {
