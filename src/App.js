@@ -184,6 +184,9 @@ export default function App() {
       meta.content = content;
     };
     
+    // Ép trình duyệt nhận diện và tối ưu kích thước 100% cho Mobile
+    addMetaTag("viewport", "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no");
+    
     addMetaTag("theme-color", "#2563eb");
     addMetaTag("apple-mobile-web-app-capable", "yes");
     addMetaTag("apple-mobile-web-app-status-bar-style", "black-translucent");
@@ -501,7 +504,7 @@ export default function App() {
       if (groupsList.includes(newName)) { customAlert('Tên nhóm đã tồn tại!'); return; }
       setGroupsList([...groupsList, newName]);
       if (sheetUrl) {
-        try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'add', sheetName: 'Groups', name: newName }) }); } 
+        try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'add', sheetName: 'Group', name: newName }) }); } 
         catch (error) { console.error("Lỗi thêm nhóm:", error); }
       }
     }
@@ -985,6 +988,41 @@ export default function App() {
             </div>
           )}
 
+          {activeTab === 'groups' && isAdmin && (
+            <div className="pb-8">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                <h2 className="text-xl md:text-2xl font-bold text-gray-800">Danh mục Nhóm</h2>
+                <button onClick={() => handleOpenGroupForm()} className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl flex items-center justify-center transition-colors shadow-sm font-medium">
+                  <Plus className="w-5 h-5 mr-1" /> Thêm nhóm
+                </button>
+              </div>
+              
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden max-w-2xl">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200 text-xs md:text-sm font-semibold text-gray-600">
+                      <th className="p-4 w-16 text-center">STT</th><th className="p-4">Tên Nhóm / Phòng ban</th><th className="p-4 text-center w-24">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-xs md:text-sm">
+                    {groupsList.map((group, idx) => (
+                      <tr key={group} className="hover:bg-gray-50 transition-colors">
+                        <td className="p-4 text-center text-gray-500 font-medium">{idx + 1}</td>
+                        <td className="p-4 font-bold text-indigo-700">{group}</td>
+                        <td className="p-4 text-center">
+                          <div className="flex items-center justify-center space-x-2">
+                            <button type="button" onClick={() => handleOpenGroupForm(group)} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg"><Edit className="w-4 h-4" /></button>
+                            <button type="button" onClick={() => handleDeleteGroup(group)} disabled={group === 'Khác'} className={`p-1.5 rounded-lg ${group === 'Khác' ? 'text-gray-300' : 'text-red-600 hover:bg-red-100'}`}><Trash2 className="w-4 h-4" /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'settings' && (
             <div className="pb-8">
               <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-6">{isAdmin ? 'Cài đặt Hệ thống' : 'Cài đặt Ứng dụng'}</h2>
@@ -1017,7 +1055,7 @@ export default function App() {
                       <label className="block text-sm font-medium text-gray-700 mb-2">API URL (Google Apps Script)</label>
                       <input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs md:text-sm text-gray-600 bg-gray-50" value={sheetUrl} onChange={(e) => setSheetUrl(e.target.value)} />
                       <div className="mt-4 p-4 bg-amber-50 text-amber-800 rounded-xl text-xs md:text-sm border border-amber-200">
-                        <strong>Cấu trúc bắt buộc:</strong> File Google Sheets phải chứa 3 tab mang tên chính xác: <code>Data</code>, <code>Users</code>, và <code>Groups</code>.
+                        <strong>Cấu trúc bắt buộc:</strong> File Google Sheets phải chứa 3 tab mang tên chính xác: <code>Data</code>, <code>Users</code>, và <code>Group</code>.
                       </div>
                     </div>
                   </div>
