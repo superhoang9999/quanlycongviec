@@ -31,38 +31,10 @@ import {
   PieChart, Pie, Cell 
 } from 'recharts';
 
-// --- DANH SÁCH NHÓM PHÒNG BAN DỰ PHÒNG ---
+// --- DANH SÁCH MẶC ĐỊNH ---
 const INITIAL_GROUPS = ['Nhóm IT', 'Nhóm Kinh Doanh', 'Nhóm Kế Toán', 'Nhóm Hành Chính', 'Nhóm Nhân Sự', 'Khác'];
-
-// --- MOCK DATA TẠO SẴN DỰ PHÒNG ---
-const INITIAL_TASKS = [
-  {
-    id: '1',
-    phanLoai: 'Dự án trọng điểm',
-    noiDung: 'Triển khai phần mềm CRM',
-    chiTiet: 'Phối hợp đối tác để cài đặt và training phần mềm CRM cho phòng Kinh doanh',
-    phoiHop: 'Phòng IT, Kinh doanh',
-    thoiHan: '2026-03-25',
-    tienDo: 'Đang thực hiện',
-    tyLe: 65,
-    nguoiPhuTrach: 'Nguyễn Văn A, Trần Thị B',
-    baoCao: 'Đã hoàn thành cài đặt server, đang chuẩn bị training.',
-    nhom: 'Nhóm IT'
-  },
-  {
-    id: '2',
-    phanLoai: 'Thường xuyên',
-    noiDung: 'Báo cáo tài chính Quý 1',
-    chiTiet: 'Tổng hợp số liệu thu chi Quý 1 năm 2026',
-    phoiHop: 'Các phòng ban',
-    thoiHan: '2026-04-10',
-    tienDo: 'Chưa bắt đầu',
-    tyLe: 0,
-    nguoiPhuTrach: 'Trần Thị B',
-    baoCao: '',
-    nhom: 'Nhóm Kế Toán'
-  }
-];
+const INITIAL_TASKS = [];
+const DEFAULT_USERS = [];
 
 // --- TÀI KHOẢN ADMIN ẨN ---
 const SUPER_ADMIN = { 
@@ -73,8 +45,6 @@ const SUPER_ADMIN = {
   fullName: 'Quản trị viên Hệ thống', 
   nhom: 'Tất cả' 
 };
-
-const DEFAULT_USERS = [];
 
 const STATUS_COLORS = {
   'Chưa bắt đầu': '#94a3b8', 
@@ -108,20 +78,37 @@ const getStatusIcon = (status) => {
 };
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [usersList, setUsersList] = useState(DEFAULT_USERS);
+  // --- OFFLINE-FIRST CACHE (Khởi tạo State từ LocalStorage để hiển thị tức thì) ---
+  const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('qlt_currentUser')) || null);
+  const [usersList, setUsersList] = useState(() => JSON.parse(localStorage.getItem('qlt_users')) || DEFAULT_USERS);
+  const [groupsList, setGroupsList] = useState(() => JSON.parse(localStorage.getItem('qlt_groups')) || INITIAL_GROUPS);
+  const [tasks, setTasks] = useState(() => JSON.parse(localStorage.getItem('qlt_tasks')) || INITIAL_TASKS);
+  
+  // Nếu thiết bị mới hoàn toàn chưa có cache user, khóa nút đăng nhập chờ đồng bộ
+  const [isSyncing, setIsSyncing] = useState(() => !localStorage.getItem('qlt_users'));
+
+  // Đồng bộ State vào LocalStorage mỗi khi có thay đổi
+  useEffect(() => { 
+    if (currentUser) localStorage.setItem('qlt_currentUser', JSON.stringify(currentUser));
+    else localStorage.removeItem('qlt_currentUser');
+  }, [currentUser]);
+  useEffect(() => { localStorage.setItem('qlt_users', JSON.stringify(usersList)); }, [usersList]);
+  useEffect(() => { localStorage.setItem('qlt_groups', JSON.stringify(groupsList)); }, [groupsList]);
+  useEffect(() => { localStorage.setItem('qlt_tasks', JSON.stringify(tasks)); }, [tasks]);
+
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
-  const [groupsList, setGroupsList] = useState(INITIAL_GROUPS);
+  
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState(null);
   const [groupFormName, setGroupFormName] = useState('');
+  
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [tasks, setTasks] = useState(INITIAL_TASKS);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [viewingTask, setViewingTask] = useState(null);
@@ -129,16 +116,19 @@ export default function App() {
     phanLoai: 'Thường xuyên', noiDung: '', chiTiet: '', phoiHop: '', nhom: 'Nhóm IT',
     thoiHan: '', tienDo: 'Chưa bắt đầu', tyLe: 0, nguoiPhuTrach: '', baoCao: ''
   });
+  
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [userFormData, setUserFormData] = useState({
     username: '', password: '', role: 'Thành viên', fullName: '', nhom: 'Khác'
   });
+  
   const [passwordForm, setPasswordForm] = useState({ current: '', new: '', confirm: '' });
   const [viewMode, setViewMode] = useState('personal'); 
   const [isKpiMode, setIsKpiMode] = useState(false); 
+  
   const [sheetUrl, setSheetUrl] = useState('https://script.google.com/macros/s/AKfycbyWQbg_Rq8lSTUdEHZNB0rCSNE_0iR87hrmFVztnqeSfQlWzUzJOv14RRUq39do2sOdNw/exec');
-  const [isSyncing, setIsSyncing] = useState(false);
+  
   const prevTaskIdsRef = useRef(new Set());
   const lastKpiNotifDateRef = useRef('');
   const currentUserRef = useRef(currentUser);
@@ -149,6 +139,7 @@ export default function App() {
   const customConfirm = (message, onConfirm) => setDialog({ isOpen: true, type: 'confirm', message, onConfirm });
   const closeDialog = () => setDialog({ ...dialog, isOpen: false });
 
+  // --- THIẾT LẬP WEB APP (PWA) ---
   useEffect(() => {
     const addMetaTag = (name, content) => {
       let meta = document.querySelector(`meta[name="${name}"]`);
@@ -180,6 +171,7 @@ export default function App() {
     document.title = "Quản lý công việc";
   }, []);
 
+  // --- AUTO ĐỒNG BỘ ---
   useEffect(() => {
     handleSync(true); 
     const interval = setInterval(() => handleSync(true), 60000); 
@@ -221,7 +213,6 @@ export default function App() {
     return scopeTasks;
   }, [tasks, currentUser, isAdmin, viewMode, isKpiMode]);
 
-  // --- XỬ LÝ QUYỀN THÔNG BÁO ---
   const requestNotificationPermission = async () => {
     if (!("Notification" in window)) {
       customAlert("Trình duyệt không hỗ trợ thông báo.");
@@ -238,10 +229,9 @@ export default function App() {
     }
   };
 
-  // --- XỬ LÝ ĐĂNG NHẬP ---
   const handleLogin = (e) => {
     e.preventDefault();
-    if (isSyncing) return; // Ngăn chặn đăng nhập nếu đang tải dữ liệu
+    if (isSyncing && usersList.length === 0) return;
 
     const inputUsername = loginForm.username.toLowerCase();
     if (inputUsername === SUPER_ADMIN.username.toLowerCase() && loginForm.password === SUPER_ADMIN.password) {
@@ -250,8 +240,12 @@ export default function App() {
       return;
     }
     const user = usersList.find(u => u.username.toLowerCase() === inputUsername && u.password === loginForm.password);
-    if (user) { setCurrentUser(user); setLoginError(''); } 
-    else { setLoginError('Tài khoản hoặc mật khẩu không chính xác!'); }
+    if (user) { 
+      setCurrentUser(user); 
+      setLoginError(''); 
+    } else { 
+      setLoginError('Tài khoản hoặc mật khẩu không chính xác!'); 
+    }
   };
 
   const handleLogout = () => {
@@ -582,11 +576,16 @@ export default function App() {
           </div>
           <form onSubmit={handleLogin} className="p-8 space-y-6">
             {loginError && <div className="p-3 bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm text-center">{loginError}</div>}
-            <div><label className="block text-sm font-medium text-gray-700 mb-2">Tên đăng nhập</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><User className="h-5 w-5 text-gray-400" /></div><input type="text" required disabled={isSyncing} className="pl-10 w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-shadow disabled:bg-gray-100 disabled:text-gray-500" placeholder="Nhập tên tài khoản..." value={loginForm.username} onChange={(e) => setLoginForm({...loginForm, username: e.target.value})} /></div></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-2">Mật khẩu</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Key className="h-5 w-5 text-gray-400" /></div><input type="password" required disabled={isSyncing} className="pl-10 w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-shadow disabled:bg-gray-100 disabled:text-gray-500" placeholder="••••••••" value={loginForm.password} onChange={(e) => setLoginForm({...loginForm, password: e.target.value})} /></div></div>
-            <button type="submit" disabled={isSyncing} className={`w-full text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-md flex justify-center items-center text-lg ${isSyncing ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}>
-              {isSyncing ? <RefreshCw className="w-5 h-5 mr-2 animate-spin" /> : <Lock className="w-5 h-5 mr-2" />} 
-              {isSyncing ? 'Đang kết nối máy chủ...' : 'Đăng nhập hệ thống'}
+            
+            <div><label className="block text-sm font-medium text-gray-700 mb-2">Tên đăng nhập</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><User className="h-5 w-5 text-gray-400" /></div>
+            <input type="text" required disabled={isSyncing && usersList.length === 0} className="pl-10 w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-shadow disabled:bg-gray-100 disabled:text-gray-500" placeholder="Nhập tên tài khoản..." value={loginForm.username} onChange={(e) => setLoginForm({...loginForm, username: e.target.value})} /></div></div>
+            
+            <div><label className="block text-sm font-medium text-gray-700 mb-2">Mật khẩu</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Key className="h-5 w-5 text-gray-400" /></div>
+            <input type="password" required disabled={isSyncing && usersList.length === 0} className="pl-10 w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-shadow disabled:bg-gray-100 disabled:text-gray-500" placeholder="••••••••" value={loginForm.password} onChange={(e) => setLoginForm({...loginForm, password: e.target.value})} /></div></div>
+            
+            <button type="submit" disabled={isSyncing && usersList.length === 0} className={`w-full text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-md flex justify-center items-center text-lg ${(isSyncing && usersList.length === 0) ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}>
+              {(isSyncing && usersList.length === 0) ? <RefreshCw className="w-5 h-5 mr-2 animate-spin" /> : <Lock className="w-5 h-5 mr-2" />} 
+              {(isSyncing && usersList.length === 0) ? 'Đang lấy dữ liệu...' : 'Đăng nhập'}
             </button>
           </form>
           <div className="text-center pb-6 text-xs text-gray-400 font-medium">Copyright &copy; Nguyễn Xuân Hoàng 2026</div>
@@ -678,7 +677,6 @@ export default function App() {
                 <select className="border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm font-medium" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)}><option value="all">Tất cả tháng</option>{Array.from({length: 12}, (_, i) => (<option key={i+1} value={i+1}>Tháng {i+1}</option>))}</select>
               </div>
 
-              {/* BẢNG CÔNG VIỆC VỚI TIÊU ĐỀ CỐ ĐỊNH VÀ ẨN THAO TÁC TRÊN MOBILE */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 flex-1 overflow-hidden flex flex-col">
                 <div className="overflow-auto h-full">
                   <table className="w-full text-left border-collapse min-w-[320px] md:min-w-[800px]">
@@ -773,7 +771,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* MODAL CHI TIẾT CÔNG VIỆC: BỔ SUNG NÚT SỬA/XÓA CHO MOBILE */}
       {viewingTask && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center z-50 md:p-4 transition-opacity" onClick={() => setViewingTask(null)}><div className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto transform transition-transform md:translate-y-0 translate-y-0" onClick={e => e.stopPropagation()}><div className="p-5 md:p-6 border-b border-gray-100 flex justify-between items-start sticky top-0 bg-white z-10"><div className="pr-4"><div className="flex flex-wrap gap-2 mb-2"><span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] md:text-xs font-bold border whitespace-nowrap shadow-sm ${CATEGORY_COLORS[viewingTask.phanLoai] || 'bg-gray-50 text-gray-700 border-gray-200'}`}>{viewingTask.phanLoai}</span><span className="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] md:text-xs font-bold border border-indigo-200 bg-indigo-50 text-indigo-700 whitespace-nowrap shadow-sm">{viewingTask.nhom}</span></div><h3 className="text-lg md:text-xl font-bold text-gray-800 leading-tight">{viewingTask.noiDung}</h3></div><button onClick={() => setViewingTask(null)} className="bg-gray-100 p-1.5 rounded-full text-gray-500 hover:bg-gray-200 transition-colors">&times;</button></div><div className="p-5 md:p-6 space-y-6"><div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6"><div><p className="text-xs md:text-sm text-gray-500 mb-1 font-medium">Phụ trách</p><div className="font-bold text-gray-800">{viewingTask.nguoiPhuTrach || '---'}</div></div><div><p className="text-xs md:text-sm text-gray-500 mb-1 font-medium">Thời hạn</p><div className="flex items-center font-bold text-gray-800 text-sm md:text-base"><Calendar className="w-4 h-4 mr-2 text-blue-500" />{viewingTask.thoiHan || '---'}</div></div><div><p className="text-xs md:text-sm text-gray-500 mb-1 font-medium">Trạng thái</p><div className="flex items-center space-x-3"><span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs md:text-sm font-bold shadow-sm" style={{ backgroundColor: `${STATUS_COLORS[viewingTask.tienDo]}15`, color: STATUS_COLORS[viewingTask.tienDo], border: `1px solid ${STATUS_COLORS[viewingTask.tienDo]}40` }}>{getStatusIcon(viewingTask.tienDo)}{viewingTask.tienDo}</span><span className="font-black text-gray-700 text-lg">{viewingTask.tyLe}%</span></div></div></div><div className="pt-4 border-t border-gray-100"><p className="text-xs md:text-sm text-gray-500 mb-2 font-medium">Chi tiết</p><div className="bg-gray-50 p-4 rounded-xl text-gray-700 whitespace-pre-wrap text-sm border border-gray-100 leading-relaxed">{viewingTask.chiTiet || 'Chưa có mô tả.'}</div></div><div className="pt-2"><p className="text-xs md:text-sm text-gray-500 mb-2 font-medium">Báo cáo</p><div className="bg-blue-50 p-4 rounded-xl text-gray-800 whitespace-pre-wrap text-sm border border-blue-100 leading-relaxed font-medium">{viewingTask.baoCao || 'Chưa có cập nhật.'}</div></div></div>
           {/* ACTION BUTTONS CHO MOBILE */}
