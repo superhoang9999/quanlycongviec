@@ -221,6 +221,7 @@ export default function App() {
     return scopeTasks;
   }, [tasks, currentUser, isAdmin, viewMode, isKpiMode]);
 
+  // --- XỬ LÝ QUYỀN THÔNG BÁO ---
   const requestNotificationPermission = async () => {
     if (!("Notification" in window)) {
       customAlert("Trình duyệt không hỗ trợ thông báo.");
@@ -237,8 +238,11 @@ export default function App() {
     }
   };
 
+  // --- XỬ LÝ ĐĂNG NHẬP ---
   const handleLogin = (e) => {
     e.preventDefault();
+    if (isSyncing) return; // Ngăn chặn đăng nhập nếu đang tải dữ liệu
+
     const inputUsername = loginForm.username.toLowerCase();
     if (inputUsername === SUPER_ADMIN.username.toLowerCase() && loginForm.password === SUPER_ADMIN.password) {
       setCurrentUser(SUPER_ADMIN);
@@ -559,10 +563,14 @@ export default function App() {
           if (fetchedGroups.length > 0) setGroupsList(Array.from(new Set([...fetchedGroups, 'Khác'])));
         }
       }
-    } catch (error) { console.error("Lỗi lấy dữ liệu:", error); } 
-    finally { setIsSyncing(false); }
+    } catch (error) { 
+      console.error("Lỗi lấy dữ liệu:", error); 
+    } finally { 
+      setIsSyncing(false); 
+    }
   };
 
+  // --- MÀN HÌNH ĐĂNG NHẬP ---
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col justify-center items-center p-4 relative">
@@ -574,9 +582,12 @@ export default function App() {
           </div>
           <form onSubmit={handleLogin} className="p-8 space-y-6">
             {loginError && <div className="p-3 bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm text-center">{loginError}</div>}
-            <div><label className="block text-sm font-medium text-gray-700 mb-2">Tên đăng nhập</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><User className="h-5 w-5 text-gray-400" /></div><input type="text" required className="pl-10 w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-shadow" placeholder="Nhập tên tài khoản..." value={loginForm.username} onChange={(e) => setLoginForm({...loginForm, username: e.target.value})} /></div></div>
-            <div><label className="block text-sm font-medium text-gray-700 mb-2">Mật khẩu</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Key className="h-5 w-5 text-gray-400" /></div><input type="password" required className="pl-10 w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-shadow" placeholder="••••••••" value={loginForm.password} onChange={(e) => setLoginForm({...loginForm, password: e.target.value})} /></div></div>
-            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-md flex justify-center items-center text-lg"><Lock className="w-5 h-5 mr-2" /> Đăng nhập hệ thống</button>
+            <div><label className="block text-sm font-medium text-gray-700 mb-2">Tên đăng nhập</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><User className="h-5 w-5 text-gray-400" /></div><input type="text" required disabled={isSyncing} className="pl-10 w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-shadow disabled:bg-gray-100 disabled:text-gray-500" placeholder="Nhập tên tài khoản..." value={loginForm.username} onChange={(e) => setLoginForm({...loginForm, username: e.target.value})} /></div></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-2">Mật khẩu</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Key className="h-5 w-5 text-gray-400" /></div><input type="password" required disabled={isSyncing} className="pl-10 w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-shadow disabled:bg-gray-100 disabled:text-gray-500" placeholder="••••••••" value={loginForm.password} onChange={(e) => setLoginForm({...loginForm, password: e.target.value})} /></div></div>
+            <button type="submit" disabled={isSyncing} className={`w-full text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-md flex justify-center items-center text-lg ${isSyncing ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}>
+              {isSyncing ? <RefreshCw className="w-5 h-5 mr-2 animate-spin" /> : <Lock className="w-5 h-5 mr-2" />} 
+              {isSyncing ? 'Đang kết nối máy chủ...' : 'Đăng nhập hệ thống'}
+            </button>
           </form>
           <div className="text-center pb-6 text-xs text-gray-400 font-medium">Copyright &copy; Nguyễn Xuân Hoàng 2026</div>
         </div>
