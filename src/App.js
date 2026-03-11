@@ -1,30 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
-  LayoutDashboard, 
-  ListTodo, 
-  Settings, 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Search, 
-  Calendar, 
-  BarChart2,
-  PieChart as PieChartIcon,
-  RefreshCw,
-  Save,
-  CheckCircle,
-  Clock,
-  AlertCircle,
-  Users,
-  Circle,
-  LogOut,
-  Lock,
-  User,
-  Shield,
-  Key,
-  Briefcase,
-  Menu,
-  Bell
+  LayoutDashboard, ListTodo, Settings, Plus, Edit, Trash2, Search, Calendar, 
+  BarChart2, PieChart as PieChartIcon, RefreshCw, Save, CheckCircle, Clock, 
+  AlertCircle, Users, Circle, LogOut, Lock, User, Shield, Key, Briefcase, 
+  Menu, Bell, ShieldCheck, ToggleLeft
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
@@ -36,32 +15,34 @@ const INITIAL_GROUPS = ['Nhóm IT', 'Nhóm Kinh Doanh', 'Nhóm Kế Toán', 'Nh�
 const INITIAL_TASKS = [];
 const DEFAULT_USERS = [];
 
+// --- CẤU HÌNH PHÂN QUYỀN MẶC ĐỊNH ---
+const DEFAULT_ROLES = [
+  { 
+    id: 'role_admin', name: 'Admin', 
+    permissions: { canViewAllGroups: true, canCreate: true, canEditFull: true, canDelete: true, viewModes: ['personal', 'group', 'all', 'kpi'], allowedCategories: [] }
+  },
+  { 
+    id: 'role_truongnhom', name: 'Trưởng nhóm', 
+    permissions: { canViewAllGroups: false, canCreate: true, canEditFull: true, canDelete: true, viewModes: ['personal', 'group'], allowedCategories: [] }
+  },
+  { 
+    id: 'role_thanhvien', name: 'Thành viên', 
+    permissions: { canViewAllGroups: false, canCreate: false, canEditFull: false, canDelete: false, viewModes: ['personal'], allowedCategories: [] }
+  }
+];
+
 // --- TÀI KHOẢN ADMIN ẨN ---
 const SUPER_ADMIN = { 
-  id: 'admin_core', 
-  username: 'Admin', 
-  password: '0912411451', 
-  role: 'Admin', 
-  fullName: 'Quản trị viên Hệ thống', 
-  nhom: 'Tất cả' 
+  id: 'admin_core', username: 'Admin', password: '0912411451', role: 'Admin', fullName: 'Quản trị viên Hệ thống', nhom: 'Tất cả' 
 };
 
-const STATUS_COLORS = {
-  'Chưa bắt đầu': '#94a3b8', 
-  'Đang thực hiện': '#3b82f6', 
-  'Hoàn thành': '#22c55e', 
-  'Quá hạn': '#ef4444' 
-};
+const STATUS_COLORS = { 'Chưa bắt đầu': '#94a3b8', 'Đang thực hiện': '#3b82f6', 'Hoàn thành': '#22c55e', 'Quá hạn': '#ef4444' };
 
 const CATEGORY_COLORS = {
-  'Thường xuyên': 'bg-blue-50 text-blue-700 border-blue-200',
-  'Công việc phát sinh': 'bg-purple-50 text-purple-700 border-purple-200',
-  'Đột xuất': 'bg-amber-50 text-amber-700 border-amber-200',
-  'Dự án trọng điểm': 'bg-indigo-50 text-indigo-700 border-indigo-200',
-  'KPI Tổng Công ty': 'bg-rose-50 text-rose-700 border-rose-200',
-  'Nhiệm vụ CĐS 2026': 'bg-cyan-50 text-cyan-700 border-cyan-200',
-  'Quản lý phần mềm': 'bg-teal-50 text-teal-700 border-teal-200',
-  'Quản lý phần cứng': 'bg-orange-50 text-orange-700 border-orange-200',
+  'Thường xuyên': 'bg-blue-50 text-blue-700 border-blue-200', 'Công việc phát sinh': 'bg-purple-50 text-purple-700 border-purple-200',
+  'Đột xuất': 'bg-amber-50 text-amber-700 border-amber-200', 'Dự án trọng điểm': 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  'KPI Tổng Công ty': 'bg-rose-50 text-rose-700 border-rose-200', 'Nhiệm vụ CĐS 2026': 'bg-cyan-50 text-cyan-700 border-cyan-200',
+  'Quản lý phần mềm': 'bg-teal-50 text-teal-700 border-teal-200', 'Quản lý phần cứng': 'bg-orange-50 text-orange-700 border-orange-200',
   'Các công việc khác': 'bg-slate-50 text-slate-700 border-slate-200'
 };
 
@@ -78,55 +59,63 @@ const getStatusIcon = (status) => {
 };
 
 export default function App() {
-  // --- OFFLINE-FIRST CACHE (Khởi tạo State từ LocalStorage để hiển thị tức thì) ---
-  const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('qlt_currentUser')) || null);
+  const [currentUser, setCurrentUser] = useState(() => JSON.parse(sessionStorage.getItem('qlt_currentUser')) || null);
   const [usersList, setUsersList] = useState(() => JSON.parse(localStorage.getItem('qlt_users')) || DEFAULT_USERS);
   const [groupsList, setGroupsList] = useState(() => JSON.parse(localStorage.getItem('qlt_groups')) || INITIAL_GROUPS);
   const [tasks, setTasks] = useState(() => JSON.parse(localStorage.getItem('qlt_tasks')) || INITIAL_TASKS);
-  
-  // Nếu thiết bị mới hoàn toàn chưa có cache user, khóa nút đăng nhập chờ đồng bộ
+  const [rolesList, setRolesList] = useState(() => JSON.parse(localStorage.getItem('qlt_roles')) || DEFAULT_ROLES);
   const [isSyncing, setIsSyncing] = useState(() => !localStorage.getItem('qlt_users'));
 
-  // Đồng bộ State vào LocalStorage mỗi khi có thay đổi
   useEffect(() => { 
-    if (currentUser) localStorage.setItem('qlt_currentUser', JSON.stringify(currentUser));
-    else localStorage.removeItem('qlt_currentUser');
+    if (currentUser) sessionStorage.setItem('qlt_currentUser', JSON.stringify(currentUser));
+    else sessionStorage.removeItem('qlt_currentUser');
   }, [currentUser]);
   useEffect(() => { localStorage.setItem('qlt_users', JSON.stringify(usersList)); }, [usersList]);
   useEffect(() => { localStorage.setItem('qlt_groups', JSON.stringify(groupsList)); }, [groupsList]);
   useEffect(() => { localStorage.setItem('qlt_tasks', JSON.stringify(tasks)); }, [tasks]);
+  useEffect(() => { localStorage.setItem('qlt_roles', JSON.stringify(rolesList)); }, [rolesList]);
+
+  // --- HỆ THỐNG PHÂN QUYỀN ĐỘNG ---
+  const currentRoleConfig = useMemo(() => {
+    if (!currentUser) return null;
+    if (currentUser.id === 'admin_core') return DEFAULT_ROLES[0]; // Super Admin luôn full quyền
+    const role = rolesList.find(r => r.name === currentUser.role);
+    return role || DEFAULT_ROLES[2]; // Fallback về Thành viên nếu lỗi
+  }, [currentUser, rolesList]);
+
+  const hasPerm = (permName) => currentRoleConfig?.permissions?.[permName] === true;
+  const hasViewMode = (modeName) => currentRoleConfig?.permissions?.viewModes?.includes(modeName);
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
-  
-  const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
-  const [editingGroup, setEditingGroup] = useState(null);
-  const [groupFormName, setGroupFormName] = useState('');
-  
   const [activeTab, setActiveTab] = useState('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
+  // States Modal Công việc
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [viewingTask, setViewingTask] = useState(null);
-  const [formData, setFormData] = useState({
-    phanLoai: 'Thường xuyên', noiDung: '', chiTiet: '', phoiHop: '', nhom: 'Nhóm IT',
-    thoiHan: '', tienDo: 'Chưa bắt đầu', tyLe: 0, nguoiPhuTrach: '', baoCao: ''
-  });
+  const [formData, setFormData] = useState({ phanLoai: 'Thường xuyên', noiDung: '', chiTiet: '', phoiHop: '', nhom: 'Nhóm IT', thoiHan: '', tienDo: 'Chưa bắt đầu', tyLe: 0, nguoiPhuTrach: '', baoCao: '' });
   
+  // States Modal User & Group
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
-  const [userFormData, setUserFormData] = useState({
-    username: '', password: '', role: 'Thành viên', fullName: '', nhom: 'Khác'
-  });
-  
+  const [userFormData, setUserFormData] = useState({ username: '', password: '', role: 'Thành viên', fullName: '', nhom: 'Khác' });
+  const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+  const [editingGroup, setEditingGroup] = useState(null);
+  const [groupFormName, setGroupFormName] = useState('');
+
+  // States Modal Roles
+  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+  const [editingRole, setEditingRole] = useState(null);
+  const [roleFormData, setRoleFormData] = useState({ name: '', permissions: { canViewAllGroups: false, canCreate: false, canEditFull: false, canDelete: false, viewModes: ['personal'], allowedCategories: [] }});
+
   const [passwordForm, setPasswordForm] = useState({ current: '', new: '', confirm: '' });
   const [viewMode, setViewMode] = useState('personal'); 
   const [isKpiMode, setIsKpiMode] = useState(false); 
-  
   const [sheetUrl, setSheetUrl] = useState('https://script.google.com/macros/s/AKfycbyWQbg_Rq8lSTUdEHZNB0rCSNE_0iR87hrmFVztnqeSfQlWzUzJOv14RRUq39do2sOdNw/exec');
   
   const prevTaskIdsRef = useRef(new Set());
@@ -139,70 +128,49 @@ export default function App() {
   const customConfirm = (message, onConfirm) => setDialog({ isOpen: true, type: 'confirm', message, onConfirm });
   const closeDialog = () => setDialog({ ...dialog, isOpen: false });
 
-  // --- THIẾT LẬP WEB APP (PWA) ---
   useEffect(() => {
-    const addMetaTag = (name, content) => {
-      let meta = document.querySelector(`meta[name="${name}"]`);
-      if (!meta) {
-        meta = document.createElement('meta');
-        meta.name = name;
-        document.head.appendChild(meta);
-      }
-      meta.content = content;
-    };
-    addMetaTag("viewport", "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no");
-    addMetaTag("theme-color", "#2563eb");
-    addMetaTag("apple-mobile-web-app-capable", "yes");
-    addMetaTag("apple-mobile-web-app-status-bar-style", "black-translucent");
-    addMetaTag("apple-mobile-web-app-title", "QL Công Việc");
-
-    const updateIcon = (rel, size) => {
-      let link = document.querySelector(`link[rel='${rel}']`);
-      if (!link) {
-        link = document.createElement('link');
-        link.rel = rel;
-        if (size) link.sizes = size;
-        document.head.appendChild(link);
-      }
-      link.href = APP_ICON_URL;
-    };
-    updateIcon('icon', null);
-    updateIcon('apple-touch-icon', '192x192');
-    document.title = "Quản lý công việc";
+    // PWA Meta setup
+    const addMetaTag = (name, content) => { let meta = document.querySelector(`meta[name="${name}"]`); if (!meta) { meta = document.createElement('meta'); meta.name = name; document.head.appendChild(meta); } meta.content = content; };
+    addMetaTag("viewport", "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"); addMetaTag("theme-color", "#2563eb"); addMetaTag("apple-mobile-web-app-capable", "yes"); addMetaTag("apple-mobile-web-app-status-bar-style", "black-translucent"); addMetaTag("apple-mobile-web-app-title", "QL Công Việc");
+    const updateIcon = (rel, size) => { let link = document.querySelector(`link[rel='${rel}']`); if (!link) { link = document.createElement('link'); link.rel = rel; if (size) link.sizes = size; document.head.appendChild(link); } link.href = APP_ICON_URL; };
+    updateIcon('icon', null); updateIcon('apple-touch-icon', '192x192'); document.title = "Quản lý công việc";
   }, []);
 
-  // --- AUTO ĐỒNG BỘ ---
   useEffect(() => {
     handleSync(true); 
     const interval = setInterval(() => handleSync(true), 60000); 
-    const handleVisibilityChange = () => {
-      if (document.hidden) clearInterval(interval);
-      else handleSync(true);
-    };
+    const handleVisibilityChange = () => { if (document.hidden) clearInterval(interval); else handleSync(true); };
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
+    return () => { clearInterval(interval); document.removeEventListener("visibilitychange", handleVisibilityChange); };
   }, [sheetUrl]);
 
-  const isMember = currentUser?.role === 'Thành viên';
-  const isAdmin = currentUser?.role === 'Admin';
-  const canDeleteTask = currentUser?.role === 'Admin' || currentUser?.role === 'Trưởng nhóm';
-  const canCreateTask = currentUser?.role === 'Admin' || currentUser?.role === 'Trưởng nhóm';
+  // Cập nhật lại viewMode khi tab thay đổi hoặc khi load để đảm bảo user không kẹt ở view họ không có quyền
+  useEffect(() => {
+    if (currentRoleConfig) {
+      if (isKpiMode && !hasViewMode('kpi')) setIsKpiMode(false);
+      if (viewMode === 'all' && !hasViewMode('all')) setViewMode('personal');
+      if (viewMode === 'group' && !hasViewMode('group')) setViewMode('personal');
+    }
+  }, [currentRoleConfig, isKpiMode, viewMode]);
 
   const visibleTasks = useMemo(() => {
-    if (!currentUser) return [];
-    let scopeTasks = isAdmin ? tasks : tasks.filter(t => t.nhom === currentUser.nhom);
+    if (!currentUser || !currentRoleConfig) return [];
+    let scopeTasks = hasPerm('canViewAllGroups') || viewMode === 'all' ? tasks : tasks.filter(t => t.nhom === currentUser.nhom);
+    
+    // Lọc theo Categories được phép
+    const allowedCats = currentRoleConfig.permissions.allowedCategories;
+    if (allowedCats && allowedCats.length > 0) {
+      scopeTasks = scopeTasks.filter(t => allowedCats.includes(t.phanLoai));
+    }
+
     if (viewMode === 'personal') {
       scopeTasks = scopeTasks.filter(t => {
         if (!t.nguoiPhuTrach) return false;
         const assignees = t.nguoiPhuTrach.split(',').map(s => s.trim().toLowerCase());
-        const userFull = currentUser.fullName.toLowerCase();
-        const userShort = currentUser.username.toLowerCase();
-        return assignees.includes(userFull) || assignees.includes(userShort);
+        return assignees.includes(currentUser.fullName.toLowerCase()) || assignees.includes(currentUser.username.toLowerCase());
       });
     }
+    
     if (isKpiMode) {
       scopeTasks = scopeTasks.filter(t => {
         if (!t.thoiHan) return false;
@@ -211,54 +179,21 @@ export default function App() {
       });
     }
     return scopeTasks;
-  }, [tasks, currentUser, isAdmin, viewMode, isKpiMode]);
-
-  const requestNotificationPermission = async () => {
-    if (!("Notification" in window)) {
-      customAlert("Trình duyệt không hỗ trợ thông báo.");
-      return;
-    }
-    const permission = await Notification.requestPermission();
-    if (permission === "granted") {
-      new Notification("Cài đặt thành công!", { 
-        body: "Bạn sẽ nhận được thông báo nhắc nhở vào 15:00 hàng ngày.",
-        icon: APP_ICON_URL
-      });
-    } else {
-      customAlert("Bạn đã từ chối cấp quyền thông báo.");
-    }
-  };
+  }, [tasks, currentUser, currentRoleConfig, viewMode, isKpiMode]);
 
   const handleLogin = (e) => {
     e.preventDefault();
     if (isSyncing && usersList.length === 0) return;
-
     const inputUsername = loginForm.username.toLowerCase();
-    if (inputUsername === SUPER_ADMIN.username.toLowerCase() && loginForm.password === SUPER_ADMIN.password) {
-      setCurrentUser(SUPER_ADMIN);
-      setLoginError('');
-      return;
-    }
+    if (inputUsername === SUPER_ADMIN.username.toLowerCase() && loginForm.password === SUPER_ADMIN.password) { setCurrentUser(SUPER_ADMIN); setLoginError(''); return; }
     const user = usersList.find(u => u.username.toLowerCase() === inputUsername && u.password === loginForm.password);
-    if (user) { 
-      setCurrentUser(user); 
-      setLoginError(''); 
-    } else { 
-      setLoginError('Tài khoản hoặc mật khẩu không chính xác!'); 
-    }
+    if (user) { setCurrentUser(user); setLoginError(''); } else { setLoginError('Tài khoản hoặc mật khẩu không chính xác!'); }
   };
 
-  const handleLogout = () => {
-    customConfirm("Bạn có chắc chắn muốn đăng xuất?", () => {
-      setCurrentUser(null);
-      setLoginForm({ username: '', password: '' });
-      setActiveTab('dashboard');
-      setIsMobileMenuOpen(false);
-    });
-  };
-
+  const handleLogout = () => { customConfirm("Bạn có chắc chắn muốn đăng xuất?", () => { setCurrentUser(null); setLoginForm({ username: '', password: '' }); setActiveTab('dashboard'); setIsMobileMenuOpen(false); }); };
   const changeTab = (tab) => { setActiveTab(tab); setIsMobileMenuOpen(false); };
 
+  // --- STATS LOGIC (Tính trên visibleTasks) ---
   const stats = useMemo(() => {
     let total = visibleTasks.length, completed = 0, inProgress = 0, overdue = 0, notStarted = 0, totalRate = 0;
     visibleTasks.forEach(t => {
@@ -272,10 +207,8 @@ export default function App() {
   }, [visibleTasks]);
 
   const pieChartData = [
-    { name: 'Hoàn thành', value: stats.completed },
-    { name: 'Đang thực hiện', value: stats.inProgress },
-    { name: 'Chưa bắt đầu', value: stats.notStarted },
-    { name: 'Quá hạn', value: stats.overdue },
+    { name: 'Hoàn thành', value: stats.completed }, { name: 'Đang thực hiện', value: stats.inProgress },
+    { name: 'Chưa bắt đầu', value: stats.notStarted }, { name: 'Quá hạn', value: stats.overdue },
   ].filter(item => item.value > 0);
 
   const barChartData = useMemo(() => {
@@ -284,37 +217,15 @@ export default function App() {
       if (!t.thoiHan) return;
       const thoiHanStr = String(t.thoiHan).trim().toLowerCase();
       const statusKey = t.tienDo === 'Hoàn thành' ? 'Hoàn thành' : 'Chưa xong';
-      if (thoiHanStr === 'hàng ngày') {
-        for (let i = 0; i < 12; i++) data[i][statusKey]++;
-      } else if (thoiHanStr === 'hàng quý') {
-        [2, 5, 8, 11].forEach(i => data[i][statusKey]++); 
-      } else {
+      if (thoiHanStr === 'hàng ngày') { for (let i = 0; i < 12; i++) data[i][statusKey]++; } 
+      else if (thoiHanStr === 'hàng quý') { [2, 5, 8, 11].forEach(i => data[i][statusKey]++); } 
+      else {
         const date = new Date(t.thoiHan);
-        if (!isNaN(date.getTime()) && date.getFullYear() === filterYear) {
-          const monthIndex = date.getMonth();
-          data[monthIndex][statusKey]++;
-        }
+        if (!isNaN(date.getTime()) && date.getFullYear() === filterYear) data[date.getMonth()][statusKey]++;
       }
     });
     return data;
   }, [visibleTasks, filterYear]);
-
-  const personStats = useMemo(() => {
-    const statsMap = {};
-    visibleTasks.forEach(t => {
-      const assignees = t.nguoiPhuTrach ? t.nguoiPhuTrach.split(',').map(s => s.trim()).filter(Boolean) : ['Chưa phân công'];
-      assignees.forEach(person => {
-        if (!statsMap[person]) statsMap[person] = { name: person, total: 0, completed: 0, inProgress: 0, overdue: 0, notStarted: 0, totalRate: 0 };
-        statsMap[person].total += 1;
-        statsMap[person].totalRate += Number(t.tyLe);
-        if (t.tienDo === 'Hoàn thành') statsMap[person].completed += 1;
-        else if (t.tienDo === 'Đang thực hiện') statsMap[person].inProgress += 1;
-        else if (t.tienDo === 'Quá hạn') statsMap[person].overdue += 1;
-        else statsMap[person].notStarted += 1;
-      });
-    });
-    return Object.values(statsMap).map(p => ({ ...p, avgRate: p.total === 0 ? 0 : Math.round(p.totalRate / p.total) })).sort((a, b) => b.total - a.total);
-  }, [visibleTasks]);
 
   const filteredTasks = useMemo(() => {
     return visibleTasks.filter(t => {
@@ -338,14 +249,12 @@ export default function App() {
     });
   }, [visibleTasks, searchTerm, filterMonth, filterYear]);
 
+  // --- CRUD TASKS ---
   const handleOpenForm = (task = null) => {
     if (task) { setEditingTask(task); setFormData({ ...task }); } 
     else {
       setEditingTask(null);
-      setFormData({ 
-        phanLoai: 'Thường xuyên', noiDung: '', chiTiet: '', phoiHop: '', thoiHan: '', tienDo: 'Chưa bắt đầu', 
-        tyLe: 0, nguoiPhuTrach: '', baoCao: '', nhom: isAdmin ? (groupsList[0] || 'Khác') : currentUser.nhom 
-      });
+      setFormData({ phanLoai: 'Thường xuyên', noiDung: '', chiTiet: '', phoiHop: '', thoiHan: '', tienDo: 'Chưa bắt đầu', tyLe: 0, nguoiPhuTrach: '', baoCao: '', nhom: hasPerm('canViewAllGroups') ? (groupsList[0] || 'Khác') : currentUser.nhom });
     }
     setIsFormOpen(true);
   };
@@ -353,24 +262,19 @@ export default function App() {
   const handleSaveTask = async (e) => {
     e.preventDefault();
     const newTask = editingTask ? { ...formData, id: editingTask.id } : { ...formData, id: Date.now().toString() };
-    if (!isAdmin) newTask.nhom = currentUser.nhom;
+    if (!hasPerm('canViewAllGroups')) newTask.nhom = currentUser.nhom;
     if (editingTask) setTasks(tasks.map(t => t.id === editingTask.id ? newTask : t));
     else setTasks([...tasks, newTask]);
     setIsFormOpen(false);
     if (sheetUrl) {
-      try {
-        await fetch(sheetUrl, {
-          method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: editingTask ? 'update' : 'add', sheetName: 'Data', ...newTask })
-        });
-      } catch (error) { console.error("Lỗi khi lưu task:", error); }
+      try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: editingTask ? 'update' : 'add', sheetName: 'Data', ...newTask }) }); } 
+      catch (error) { console.error("Lỗi khi lưu task:", error); }
     }
   };
 
   const handleDeleteTask = async (id) => {
     customConfirm('Bạn có chắc chắn muốn xóa công việc này?', async () => {
-      setTasks(prev => prev.filter(t => t.id !== id));
-      setViewingTask(null);
+      setTasks(prev => prev.filter(t => t.id !== id)); setViewingTask(null);
       if (sheetUrl) {
         try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'delete', sheetName: 'Data', id: id }) }); } 
         catch (error) { console.error("Lỗi xóa task:", error); }
@@ -378,9 +282,10 @@ export default function App() {
     });
   };
 
+  // --- CRUD USERS ---
   const handleOpenUserForm = (user = null) => {
     if (user) { setEditingUser(user); setUserFormData({ ...user }); } 
-    else { setEditingUser(null); setUserFormData({ username: '', password: '', role: 'Thành viên', fullName: '', nhom: groupsList[0] || 'Khác' }); }
+    else { setEditingUser(null); setUserFormData({ username: '', password: '', role: rolesList[2]?.name || 'Thành viên', fullName: '', nhom: groupsList[0] || 'Khác' }); }
     setIsUserModalOpen(true);
   };
 
@@ -401,7 +306,7 @@ export default function App() {
     setIsUserModalOpen(false);
     if (sheetUrl) {
       try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: editingUser ? 'update' : 'add', sheetName: 'Users', ...newUser }) }); } 
-      catch (error) { console.error("Lỗi khi lưu user:", error); }
+      catch (error) {}
     }
   };
 
@@ -409,11 +314,104 @@ export default function App() {
     if (id === currentUser.id) { customAlert("Không thể xóa tài khoản đang đăng nhập!"); return; }
     customConfirm('Bạn có chắc chắn muốn xóa tài khoản này?', async () => {
       setUsersList(prevList => prevList.filter(u => u.id !== id)); 
-      if (sheetUrl) {
-        try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'delete', sheetName: 'Users', id: id }) }); } 
-        catch (error) { console.error("Lỗi xóa user:", error); }
-      }
+      if (sheetUrl) { try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'delete', sheetName: 'Users', id: id }) }); } catch (error) {} }
     });
+  };
+
+  // --- CRUD GROUPS ---
+  const handleOpenGroupForm = (groupName = null) => { setEditingGroup(groupName); setGroupFormName(groupName || ''); setIsGroupModalOpen(true); };
+  const handleSaveGroup = async (e) => {
+    e.preventDefault(); const newName = groupFormName.trim(); if (!newName) return;
+    if (editingGroup) {
+      if (editingGroup === newName) { setIsGroupModalOpen(false); return; }
+      if (groupsList.includes(newName)) { customAlert('Tên nhóm đã tồn tại!'); return; }
+      setGroupsList(groupsList.map(g => g === editingGroup ? newName : g)); setTasks(tasks.map(t => t.nhom === editingGroup ? { ...t, nhom: newName } : t)); setUsersList(usersList.map(u => u.nhom === editingGroup ? { ...u, nhom: newName } : u));
+      if (currentUser?.nhom === editingGroup) setCurrentUser({...currentUser, nhom: newName});
+      if (sheetUrl) { try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'updateGroup', oldName: editingGroup, newName: newName }) }); } catch (error) {} }
+    } else {
+      if (groupsList.includes(newName)) { customAlert('Tên nhóm đã tồn tại!'); return; }
+      setGroupsList([...groupsList, newName]);
+      if (sheetUrl) { try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'add', sheetName: 'Group', name: newName }) }); } catch (error) {} }
+    }
+    setIsGroupModalOpen(false);
+  };
+  const handleDeleteGroup = async (groupName) => {
+    if (groupName === 'Khác') { customAlert('Không thể xóa nhóm mặc định này!'); return; }
+    customConfirm(`Bạn có chắc muốn xóa nhóm "${groupName}"?`, async () => {
+      setGroupsList(prevList => prevList.filter(g => g !== groupName)); setTasks(prevTasks => prevTasks.map(t => t.nhom === groupName ? { ...t, nhom: 'Khác' } : t)); setUsersList(prevUsers => prevUsers.map(u => u.nhom === groupName ? { ...u, nhom: 'Khác' } : u));
+      if (currentUser?.nhom === groupName) setCurrentUser({...currentUser, nhom: 'Khác'});
+      if (sheetUrl) { try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'deleteGroup', name: groupName }) }); } catch (error) {} }
+    });
+  };
+
+  // --- CRUD ROLES (Quyền) ---
+  const handleOpenRoleForm = (role = null) => {
+    if (role) { setEditingRole(role); setRoleFormData({ ...role }); } 
+    else { setEditingRole(null); setRoleFormData({ name: '', permissions: { canViewAllGroups: false, canCreate: false, canEditFull: false, canDelete: false, viewModes: ['personal'], allowedCategories: [] }}); }
+    setIsRoleModalOpen(true);
+  };
+
+  const handleSaveRole = async (e) => {
+    e.preventDefault();
+    if (['Admin', 'Trưởng nhóm', 'Thành viên'].includes(editingRole?.name) && editingRole?.name !== roleFormData.name) {
+      customAlert("Không thể đổi tên quyền mặc định của hệ thống!"); return;
+    }
+    const newRole = editingRole ? { ...roleFormData, id: editingRole.id } : { ...roleFormData, id: 'role_' + Date.now() };
+    if (editingRole) {
+      if (rolesList.some(r => r.id !== newRole.id && r.name.toLowerCase() === newRole.name.toLowerCase())) { customAlert("Tên quyền đã tồn tại!"); return; }
+      setRolesList(rolesList.map(r => r.id === editingRole.id ? newRole : r));
+    } else {
+      if (rolesList.some(r => r.name.toLowerCase() === newRole.name.toLowerCase())) { customAlert("Tên quyền đã tồn tại!"); return; }
+      setRolesList([...rolesList, newRole]);
+    }
+    setIsRoleModalOpen(false);
+    if (sheetUrl) {
+      // Gửi lên sheet Roles (cần update Apps Script để hứng action addRole/updateRole)
+      try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: editingRole ? 'updateRole' : 'addRole', ...newRole }) }); } catch (error) {}
+    }
+  };
+
+  const handleDeleteRole = async (id, roleName) => {
+    if (['Admin', 'Trưởng nhóm', 'Thành viên'].includes(roleName)) { customAlert('Không thể xóa các quyền mặc định!'); return; }
+    if (usersList.some(u => u.role === roleName)) { customAlert('Đang có người dùng sử dụng quyền này, không thể xóa!'); return; }
+    customConfirm(`Bạn có chắc muốn xóa quyền "${roleName}"?`, async () => {
+      setRolesList(prev => prev.filter(r => r.id !== id));
+      if (sheetUrl) { try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'deleteRole', id: id }) }); } catch (error) {} }
+    });
+  };
+
+  const handleSync = async (isSilent = false) => {
+    if (!sheetUrl) return; setIsSyncing(true);
+    try {
+      const response = await fetch(`${sheetUrl}?action=getAll`);
+      const result = await response.json();
+      if (result.status === 'success') {
+        if (result.tasks) {
+          const fetchedTasks = result.tasks.filter(row => row['Nội dung công việc']).map(row => {
+              let parsedThoiHan = ''; if (row['Thời hạn']) { const d = new Date(row['Thời hạn']); parsedThoiHan = !isNaN(d.getTime()) ? d.toISOString().split('T')[0] : String(row['Thời hạn']); }
+              return { id: row['ID']?.toString() || Date.now().toString(), phanLoai: row['Phân loại nhiệm vụ'] || 'Thường xuyên', noiDung: row['Nội dung công việc'] || '', chiTiet: row['Chi tiết công việc'] || '', phoiHop: row['Phối hợp'] || '', thoiHan: parsedThoiHan, tienDo: row['Tiến độ'] || 'Chưa bắt đầu', tyLe: Number(row['Tỷ lệ hoàn thành']) || 0, nguoiPhuTrach: row['Người được phân công'] || '', baoCao: row['Báo cáo kết quả'] || '', nhom: row['Nhóm'] || 'Khác' };
+            });
+          setTasks(fetchedTasks);
+        }
+        if (result.users) {
+          const fetchedUsers = result.users.filter(row => row['Tên đăng nhập']).map(row => ({ id: row['ID']?.toString() || Date.now().toString(), fullName: row['Họ và tên'], username: row['Tên đăng nhập'], password: row['Mật khẩu'], role: row['Quyền hạn'] || 'Thành viên', nhom: row['Nhóm'] || 'Khác' }));
+          setUsersList(fetchedUsers);
+          if (currentUser && currentUser.id !== 'admin_core') { const updatedCurrent = fetchedUsers.find(u => u.id === currentUser.id); if (updatedCurrent) setCurrentUser(updatedCurrent); }
+        }
+        if (result.groups) {
+          const fetchedGroups = result.groups.filter(row => row['Tên nhóm']).map(row => row['Tên nhóm']);
+          if (fetchedGroups.length > 0) setGroupsList(Array.from(new Set([...fetchedGroups, 'Khác'])));
+        }
+        if (result.roles) {
+           const fetchedRoles = result.roles.filter(row => row['Tên quyền']).map(row => ({
+             id: row['ID']?.toString(),
+             name: row['Tên quyền'],
+             permissions: JSON.parse(row['Cấu hình'] || '{}')
+           }));
+           if (fetchedRoles.length > 0) setRolesList(fetchedRoles);
+        }
+      }
+    } catch (error) { } finally { setIsSyncing(false); }
   };
 
   const handleChangePassword = async (e) => {
@@ -421,174 +419,27 @@ export default function App() {
     if (passwordForm.current !== currentUser.password) { customAlert("Mật khẩu hiện tại không đúng!"); return; }
     if (passwordForm.new !== passwordForm.confirm) { customAlert("Mật khẩu xác nhận không khớp!"); return; }
     const updatedUser = { ...currentUser, password: passwordForm.new };
-    setCurrentUser(updatedUser);
-    setUsersList(usersList.map(u => u.id === updatedUser.id ? updatedUser : u));
-    setPasswordForm({ current: '', new: '', confirm: '' });
-    customAlert("Đổi mật khẩu thành công!");
-    if (sheetUrl) {
-      try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'update', sheetName: 'Users', ...updatedUser }) }); } 
-      catch (error) { console.error("Lỗi cập nhật mật khẩu:", error); }
-    }
+    setCurrentUser(updatedUser); setUsersList(usersList.map(u => u.id === updatedUser.id ? updatedUser : u)); setPasswordForm({ current: '', new: '', confirm: '' }); customAlert("Đổi mật khẩu thành công!");
+    if (sheetUrl) { try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'update', sheetName: 'Users', ...updatedUser }) }); } catch (error) {} }
   };
 
-  const handleOpenGroupForm = (groupName = null) => { setEditingGroup(groupName); setGroupFormName(groupName || ''); setIsGroupModalOpen(true); };
-
-  const handleSaveGroup = async (e) => {
-    e.preventDefault();
-    const newName = groupFormName.trim();
-    if (!newName) return;
-    if (editingGroup) {
-      if (editingGroup === newName) { setIsGroupModalOpen(false); return; }
-      if (groupsList.includes(newName)) { customAlert('Tên nhóm đã tồn tại!'); return; }
-      setGroupsList(groupsList.map(g => g === editingGroup ? newName : g));
-      setTasks(tasks.map(t => t.nhom === editingGroup ? { ...t, nhom: newName } : t));
-      setUsersList(usersList.map(u => u.nhom === editingGroup ? { ...u, nhom: newName } : u));
-      if (currentUser?.nhom === editingGroup) setCurrentUser({...currentUser, nhom: newName});
-      if (sheetUrl) {
-        try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'updateGroup', oldName: editingGroup, newName: newName }) }); } 
-        catch (error) { console.error("Lỗi cập nhật nhóm:", error); }
-      }
-    } else {
-      if (groupsList.includes(newName)) { customAlert('Tên nhóm đã tồn tại!'); return; }
-      setGroupsList([...groupsList, newName]);
-      if (sheetUrl) {
-        try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'add', sheetName: 'Group', name: newName }) }); } 
-        catch (error) { console.error("Lỗi thêm nhóm:", error); }
-      }
-    }
-    setIsGroupModalOpen(false);
+  const requestNotificationPermission = async () => {
+    if (!("Notification" in window)) { customAlert("Trình duyệt không hỗ trợ thông báo."); return; }
+    const permission = await Notification.requestPermission();
+    if (permission === "granted") { new Notification("Cài đặt thành công!", { body: "Bạn sẽ nhận được thông báo nhắc nhở vào 15:00 hàng ngày.", icon: APP_ICON_URL }); } else { customAlert("Bạn đã từ chối cấp quyền thông báo."); }
   };
 
-  const handleDeleteGroup = async (groupName) => {
-    if (groupName === 'Khác') { customAlert('Không thể xóa nhóm mặc định này!'); return; }
-    customConfirm(`Bạn có chắc muốn xóa nhóm "${groupName}"?`, async () => {
-      setGroupsList(prevList => prevList.filter(g => g !== groupName));
-      setTasks(prevTasks => prevTasks.map(t => t.nhom === groupName ? { ...t, nhom: 'Khác' } : t));
-      setUsersList(prevUsers => prevUsers.map(u => u.nhom === groupName ? { ...u, nhom: 'Khác' } : u));
-      if (currentUser?.nhom === groupName) setCurrentUser({...currentUser, nhom: 'Khác'});
-      if (sheetUrl) {
-        try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'deleteGroup', name: groupName }) }); } 
-        catch (error) { console.error("Lỗi xóa nhóm:", error); }
-      }
-    });
-  };
-
-  const handleSync = async (isSilent = false) => {
-    if (!sheetUrl) return;
-    setIsSyncing(true);
-    try {
-      const response = await fetch(`${sheetUrl}?action=getAll`);
-      const result = await response.json();
-      if (result.status === 'success') {
-        if (result.tasks) {
-          const fetchedTasks = result.tasks.filter(row => row['Nội dung công việc']).map(row => {
-              let parsedThoiHan = '';
-              if (row['Thời hạn']) {
-                const d = new Date(row['Thời hạn']);
-                parsedThoiHan = !isNaN(d.getTime()) ? d.toISOString().split('T')[0] : String(row['Thời hạn']);
-              }
-              return {
-                id: row['ID']?.toString() || Date.now().toString(),
-                phanLoai: row['Phân loại nhiệm vụ'] || 'Thường xuyên',
-                noiDung: row['Nội dung công việc'] || '',
-                chiTiet: row['Chi tiết công việc'] || '',
-                phoiHop: row['Phối hợp'] || '',
-                thoiHan: parsedThoiHan,
-                tienDo: row['Tiến độ'] || 'Chưa bắt đầu',
-                tyLe: Number(row['Tỷ lệ hoàn thành']) || 0,
-                nguoiPhuTrach: row['Người được phân công'] || '',
-                baoCao: row['Báo cáo kết quả'] || '',
-                nhom: row['Nhóm'] || 'Khác'
-              };
-            });
-          if (fetchedTasks.length > 0) {
-             const currentUserNow = currentUserRef.current;
-             const now = new Date();
-             const todayString = now.toDateString();
-             if (Notification.permission === "granted" && currentUserNow) {
-               const myName = currentUserNow.fullName.toLowerCase();
-               const myUsername = currentUserNow.username.toLowerCase();
-               fetchedTasks.forEach(task => {
-                 const assignees = task.nguoiPhuTrach ? task.nguoiPhuTrach.split(',').map(s => s.trim().toLowerCase()) : [];
-                 const isMine = assignees.includes(myName) || assignees.includes(myUsername);
-                 if (prevTaskIdsRef.current.size > 0 && !prevTaskIdsRef.current.has(task.id) && isMine) {
-                   new Notification("Bạn có công việc mới!", { body: task.noiDung, icon: APP_ICON_URL });
-                 }
-                 if (isMine && task.tienDo !== 'Hoàn thành' && task.thoiHan) {
-                   if (now.getHours() === 15 && lastKpiNotifDateRef.current !== todayString) {
-                     const deadline = new Date(task.thoiHan);
-                     if (!isNaN(deadline.getTime())) {
-                       const todayDateOnly = new Date(); todayDateOnly.setHours(0,0,0,0);
-                       const dlDateOnly = new Date(deadline); dlDateOnly.setHours(0,0,0,0);
-                       const diffDays = Math.ceil((dlDateOnly - todayDateOnly) / (1000 * 60 * 60 * 24));
-                       if (diffDays <= 7) {
-                         let title = `KPI còn ${diffDays} ngày!`;
-                         if (diffDays === 0) title = "KPI đến hạn HÔM NAY!";
-                         if (diffDays < 0) title = `KPI QUÁ HẠN ${Math.abs(diffDays)} ngày!`;
-                         new Notification(title, { body: task.noiDung, icon: APP_ICON_URL });
-                       }
-                     }
-                   }
-                 }
-               });
-               if (now.getHours() === 15) lastKpiNotifDateRef.current = todayString;
-             }
-             prevTaskIdsRef.current = new Set(fetchedTasks.map(t => t.id));
-             setTasks(fetchedTasks);
-          }
-        }
-        if (result.users) {
-          const fetchedUsers = result.users.filter(row => row['Tên đăng nhập']).map(row => ({
-            id: row['ID']?.toString() || Date.now().toString(),
-            fullName: row['Họ và tên'],
-            username: row['Tên đăng nhập'],
-            password: row['Mật khẩu'],
-            role: row['Quyền hạn'] || 'Thành viên',
-            nhom: row['Nhóm'] || 'Khác'
-          }));
-          setUsersList(fetchedUsers);
-          if (currentUser && currentUser.id !== 'admin_core') {
-            const updatedCurrent = fetchedUsers.find(u => u.id === currentUser.id);
-            if (updatedCurrent) setCurrentUser(updatedCurrent);
-          }
-        }
-        if (result.groups) {
-          const fetchedGroups = result.groups.filter(row => row['Tên nhóm']).map(row => row['Tên nhóm']);
-          if (fetchedGroups.length > 0) setGroupsList(Array.from(new Set([...fetchedGroups, 'Khác'])));
-        }
-      }
-    } catch (error) { 
-      console.error("Lỗi lấy dữ liệu:", error); 
-    } finally { 
-      setIsSyncing(false); 
-    }
-  };
-
-  // --- MÀN HÌNH ĐĂNG NHẬP ---
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col justify-center items-center p-4 relative">
         <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden z-10">
-          <div className="bg-blue-600 p-8 text-center">
-            <div className="w-24 h-24 mx-auto mb-4 transform hover:scale-105 transition-transform"><img src={APP_ICON_URL} alt="App Logo" className="w-full h-full object-contain drop-shadow-md" onError={(e)=>{e.target.onerror = null; e.target.src=FALLBACK_ICON}}/></div>
-            <h1 className="text-2xl font-bold text-white mb-1">Quản lý công việc</h1>
-            <p className="text-blue-100 text-sm">Hệ thống chuyên nghiệp nội bộ</p>
-          </div>
+          <div className="bg-blue-600 p-8 text-center"><div className="w-24 h-24 mx-auto mb-4 transform hover:scale-105 transition-transform"><img src={APP_ICON_URL} alt="App Logo" className="w-full h-full object-contain drop-shadow-md" onError={(e)=>{e.target.onerror = null; e.target.src=FALLBACK_ICON}}/></div><h1 className="text-2xl font-bold text-white mb-1">Quản lý công việc</h1><p className="text-blue-100 text-sm">Hệ thống chuyên nghiệp nội bộ</p></div>
           <form onSubmit={handleLogin} className="p-8 space-y-6">
             {loginError && <div className="p-3 bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm text-center">{loginError}</div>}
-            
-            <div><label className="block text-sm font-medium text-gray-700 mb-2">Tên đăng nhập</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><User className="h-5 w-5 text-gray-400" /></div>
-            <input type="text" required disabled={isSyncing && usersList.length === 0} className="pl-10 w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-shadow disabled:bg-gray-100 disabled:text-gray-500" placeholder="Nhập tên tài khoản..." value={loginForm.username} onChange={(e) => setLoginForm({...loginForm, username: e.target.value})} /></div></div>
-            
-            <div><label className="block text-sm font-medium text-gray-700 mb-2">Mật khẩu</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Key className="h-5 w-5 text-gray-400" /></div>
-            <input type="password" required disabled={isSyncing && usersList.length === 0} className="pl-10 w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-shadow disabled:bg-gray-100 disabled:text-gray-500" placeholder="••••••••" value={loginForm.password} onChange={(e) => setLoginForm({...loginForm, password: e.target.value})} /></div></div>
-            
-            <button type="submit" disabled={isSyncing && usersList.length === 0} className={`w-full text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-md flex justify-center items-center text-lg ${(isSyncing && usersList.length === 0) ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}>
-              {(isSyncing && usersList.length === 0) ? <RefreshCw className="w-5 h-5 mr-2 animate-spin" /> : <Lock className="w-5 h-5 mr-2" />} 
-              {(isSyncing && usersList.length === 0) ? 'Đang lấy dữ liệu...' : 'Đăng nhập'}
-            </button>
+            <div><label className="block text-sm font-medium text-gray-700 mb-2">Tên đăng nhập</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><User className="h-5 w-5 text-gray-400" /></div><input type="text" required disabled={isSyncing && usersList.length === 0} className="pl-10 w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-shadow disabled:bg-gray-100 disabled:text-gray-500" placeholder="Nhập tên tài khoản..." value={loginForm.username} onChange={(e) => setLoginForm({...loginForm, username: e.target.value})} /></div></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-2">Mật khẩu</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Key className="h-5 w-5 text-gray-400" /></div><input type="password" required disabled={isSyncing && usersList.length === 0} className="pl-10 w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-shadow disabled:bg-gray-100 disabled:text-gray-500" placeholder="••••••••" value={loginForm.password} onChange={(e) => setLoginForm({...loginForm, password: e.target.value})} /></div></div>
+            <button type="submit" disabled={isSyncing && usersList.length === 0} className={`w-full text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-md flex justify-center items-center text-lg ${(isSyncing && usersList.length === 0) ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}>{(isSyncing && usersList.length === 0) ? <RefreshCw className="w-5 h-5 mr-2 animate-spin" /> : <Lock className="w-5 h-5 mr-2" />} {(isSyncing && usersList.length === 0) ? 'Đang lấy dữ liệu...' : 'Đăng nhập'}</button>
           </form>
-          <div className="text-center pb-6 text-xs text-gray-400 font-medium">Copyright &copy; Nguyễn Xuân Hoàng 2026</div>
         </div>
       </div>
     );
@@ -605,192 +456,234 @@ export default function App() {
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           <button onClick={() => changeTab('dashboard')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'dashboard' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-600 hover:bg-gray-100'}`}><LayoutDashboard className="w-5 h-5" /><span>Tổng quan</span></button>
           <button onClick={() => changeTab('tasks')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'tasks' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-600 hover:bg-gray-100'}`}><ListTodo className="w-5 h-5" /><span>Danh sách công việc</span></button>
-          {isAdmin && (<><button onClick={() => changeTab('users')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'users' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-600 hover:bg-gray-100'}`}><Users className="w-5 h-5" /><span>Quản lý người dùng</span></button><button onClick={() => changeTab('groups')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'groups' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-600 hover:bg-gray-100'}`}><Briefcase className="w-5 h-5" /><span>Danh mục Nhóm</span></button></>)}
-          <button onClick={() => changeTab('settings')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'settings' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-600 hover:bg-gray-100'}`}><Settings className="w-5 h-5" /><span>{isAdmin ? 'Cài đặt hệ thống' : 'Cài đặt'}</span></button>
+          {hasPerm('canViewAllGroups') && currentUser.role === 'Admin' && (
+            <>
+              <button onClick={() => changeTab('users')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'users' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-600 hover:bg-gray-100'}`}><Users className="w-5 h-5" /><span>Quản lý người dùng</span></button>
+              <button onClick={() => changeTab('groups')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'groups' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-600 hover:bg-gray-100'}`}><Briefcase className="w-5 h-5" /><span>Danh mục Nhóm</span></button>
+              <button onClick={() => changeTab('roles')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'roles' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-600 hover:bg-gray-100'}`}><ShieldCheck className="w-5 h-5" /><span>Quản lý Quyền</span></button>
+            </>
+          )}
+          <button onClick={() => changeTab('settings')} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors ${activeTab === 'settings' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-600 hover:bg-gray-100'}`}><Settings className="w-5 h-5" /><span>{currentUser.role === 'Admin' ? 'Cài đặt hệ thống' : 'Cài đặt'}</span></button>
         </nav>
         <div className="p-4 border-t border-gray-100 space-y-2 bg-gray-50">
           <button type="button" onClick={() => handleSync()} disabled={isSyncing} className="w-full flex items-center justify-center space-x-2 bg-emerald-50 text-emerald-600 px-4 py-2 rounded-lg hover:bg-emerald-100 transition-colors"><RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} /><span>{isSyncing ? 'Đồng bộ...' : 'Đồng bộ'}</span></button>
           <button type="button" onClick={handleLogout} className="w-full flex items-center justify-center space-x-2 bg-red-50 text-red-600 px-4 py-2 rounded-lg hover:bg-red-100 transition-colors"><LogOut className="w-4 h-4" /><span>Đăng xuất</span></button>
-          <div className="pt-2 text-center text-[10px] text-gray-400 font-medium">Copyright &copy; Nguyễn Xuân Hoàng 2026</div>
         </div>
       </div>
 
       <div className="flex-1 flex flex-col h-full overflow-hidden bg-gray-50/50">
-        <div className="md:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shadow-sm z-10 flex-shrink-0">
-          <div className="flex items-center space-x-2"><img src={APP_ICON_URL} alt="Icon" className="w-6 h-6 object-contain" onError={(e)=>{e.target.onerror = null; e.target.src=FALLBACK_ICON}}/><h1 className="text-base font-bold text-gray-800">Quản lý công việc</h1></div>
-          <button onClick={() => setIsMobileMenuOpen(true)} className="p-1.5 bg-gray-100 rounded-lg text-gray-600 hover:bg-gray-200 transition-transform"><Menu className="w-6 h-6" /></button>
-        </div>
+        <div className="md:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shadow-sm z-10 flex-shrink-0"><div className="flex items-center space-x-2"><img src={APP_ICON_URL} alt="Icon" className="w-6 h-6 object-contain" onError={(e)=>{e.target.onerror = null; e.target.src=FALLBACK_ICON}}/><h1 className="text-base font-bold text-gray-800">Quản lý công việc</h1></div><button onClick={() => setIsMobileMenuOpen(true)} className="p-1.5 bg-gray-100 rounded-lg text-gray-600 hover:bg-gray-200 transition-transform"><Menu className="w-6 h-6" /></button></div>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
-          {activeTab === 'dashboard' && (
-            <div className="pb-8">
-              <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 md:mb-8 gap-4">
-                <div className="flex flex-wrap gap-2 md:gap-3 w-full md:w-auto">
-                   <div className="flex bg-gray-200 p-1 rounded-lg">
-                      <button onClick={() => setViewMode('personal')} className={`px-3 py-1.5 rounded-md text-xs md:text-sm font-semibold transition-colors ${viewMode === 'personal' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>Của tôi</button>
-                      <button onClick={() => setViewMode('group')} className={`px-3 py-1.5 rounded-md text-xs md:text-sm font-semibold transition-colors ${viewMode === 'group' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>{isAdmin ? 'Hệ thống' : 'Của Nhóm'}</button>
-                    </div>
-                    <div className="flex bg-gray-200 p-1 rounded-lg">
-                      <button onClick={() => setIsKpiMode(false)} className={`px-3 py-1.5 rounded-md text-xs md:text-sm font-semibold transition-colors ${!isKpiMode ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>Tất cả</button>
-                      <button onClick={() => setIsKpiMode(true)} className={`px-3 py-1.5 rounded-md text-xs md:text-sm font-semibold transition-colors flex items-center justify-center ${isKpiMode ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}><AlertCircle className="w-3.5 h-3.5 mr-1" /> KPI</button>
-                    </div>
-                </div>
-                <div className="flex w-full md:w-auto"><select className="w-full md:w-auto bg-white border border-gray-300 rounded-lg px-4 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium" value={filterYear} onChange={(e) => setFilterYear(parseInt(e.target.value))}><option value={2025}>Năm 2025</option><option value={2026}>Năm 2026</option><option value={2027}>Năm 2027</option></select></div>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
-                <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row md:items-center justify-center md:justify-start text-center md:text-left"><div className="bg-blue-100 p-3 rounded-full text-blue-600 mx-auto md:mx-0 mb-2 md:mb-0 md:mr-4"><ListTodo className="w-6 h-6 md:w-8 md:h-8" /></div><div><p className="text-xs md:text-sm text-gray-500 font-medium">Tổng việc</p><h3 className="text-xl md:text-2xl font-bold text-gray-800">{stats.total}</h3></div></div>
-                <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row md:items-center justify-center md:justify-start text-center md:text-left"><div className="bg-green-100 p-3 rounded-full text-green-600 mx-auto md:mx-0 mb-2 md:mb-0 md:mr-4"><CheckCircle className="w-6 h-6 md:w-8 md:h-8" /></div><div><p className="text-xs md:text-sm text-gray-500 font-medium">Hoàn thành</p><h3 className="text-xl md:text-2xl font-bold text-gray-800">{stats.completed}</h3></div></div>
-                <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row md:items-center justify-center md:justify-start text-center md:text-left"><div className="bg-orange-100 p-3 rounded-full text-orange-500 mx-auto md:mx-0 mb-2 md:mb-0 md:mr-4"><Clock className="w-6 h-6 md:w-8 md:h-8" /></div><div><p className="text-xs md:text-sm text-gray-500 font-medium">Đang làm</p><h3 className="text-xl md:text-2xl font-bold text-gray-800">{stats.inProgress}</h3></div></div>
-                <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row md:items-center justify-center md:justify-start text-center md:text-left"><div className="bg-red-100 p-3 rounded-full text-red-600 mx-auto md:mx-0 mb-2 md:mb-0 md:mr-4"><AlertCircle className="w-6 h-6 md:w-8 md:h-8" /></div><div><p className="text-xs md:text-sm text-gray-500 font-medium">Quá hạn</p><h3 className="text-xl md:text-2xl font-bold text-gray-800">{stats.overdue}</h3></div></div>
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 lg:col-span-2">
-                  <h3 className="text-base md:text-lg font-bold text-gray-800 mb-6 flex items-center"><BarChart2 className="w-5 h-5 mr-2 text-blue-500" /> Thống kê theo tháng</h3>
-                  <div className="h-64 md:h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={barChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" /><XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#6b7280', fontSize: 12}} /><YAxis axisLine={false} tickLine={false} tick={{fill: '#6b7280', fontSize: 12}} /><Tooltip cursor={{fill: '#f3f4f6'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} /><Legend wrapperStyle={{paddingTop: '10px', fontSize: 12}} /><Bar dataKey="Hoàn thành" stackId="a" fill="#22c55e" radius={[0, 0, 4, 4]} barSize={20} /><Bar dataKey="Chưa xong" stackId="a" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={20} /></BarChart></ResponsiveContainer></div>
-                </div>
-                <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center">
-                  <h3 className="text-base md:text-lg font-bold text-gray-800 mb-2 flex items-center w-full"><PieChartIcon className="w-5 h-5 mr-2 text-blue-500" /> Tỷ lệ trạng thái</h3>
-                  <div className="h-56 w-full relative"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={pieChartData} innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value">{pieChartData.map((entry, index) => (<Cell key={`cell-${index}`} fill={STATUS_COLORS[entry.name]} />))}</Pie><Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} /></PieChart></ResponsiveContainer><div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"><span className="text-2xl font-bold text-gray-800">{stats.avgRate}%</span><span className="text-[10px] text-gray-500 uppercase tracking-wider">T.Bình HT</span></div></div>
-                  <div className="w-full mt-4 space-y-2">{pieChartData.map((item, idx) => (<div key={idx} className="flex justify-between items-center text-xs md:text-sm"><div className="flex items-center"><span className="w-2.5 h-2.5 rounded-full mr-2" style={{backgroundColor: STATUS_COLORS[item.name]}}></span><span className="text-gray-600">{item.name}</span></div><span className="font-semibold text-gray-800">{item.value}</span></div>))}</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'tasks' && (
-            <div className="h-full flex flex-col pb-8">
+          
+          {(activeTab === 'dashboard' || activeTab === 'tasks') && (
+            <div className="pb-8 h-full flex flex-col">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                 <div className="flex flex-wrap gap-2 md:gap-3 w-full md:w-auto">
                     <div className="flex bg-gray-200 p-1 rounded-lg">
-                      <button onClick={() => setViewMode('personal')} className={`px-3 py-1.5 rounded-md text-xs md:text-sm font-semibold transition-colors ${viewMode === 'personal' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>Của tôi</button>
-                      <button onClick={() => setViewMode('group')} className={`px-3 py-1.5 rounded-md text-xs md:text-sm font-semibold transition-colors ${viewMode === 'group' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>{isAdmin ? 'Hệ thống' : 'Nhóm'}</button>
+                      {hasViewMode('personal') && <button onClick={() => setViewMode('personal')} className={`px-3 py-1.5 rounded-md text-xs md:text-sm font-semibold transition-colors ${viewMode === 'personal' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>Của tôi</button>}
+                      {hasViewMode('group') && <button onClick={() => setViewMode('group')} className={`px-3 py-1.5 rounded-md text-xs md:text-sm font-semibold transition-colors ${viewMode === 'group' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>Của Nhóm</button>}
+                      {hasViewMode('all') && <button onClick={() => setViewMode('all')} className={`px-3 py-1.5 rounded-md text-xs md:text-sm font-semibold transition-colors ${viewMode === 'all' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>Tất cả</button>}
                     </div>
-                    <div className="flex bg-gray-200 p-1 rounded-lg">
-                      <button onClick={() => setIsKpiMode(false)} className={`px-3 py-1.5 rounded-md text-xs md:text-sm font-semibold transition-colors ${!isKpiMode ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>Tất cả</button>
-                      <button onClick={() => setIsKpiMode(true)} className={`px-3 py-1.5 rounded-md text-xs md:text-sm font-semibold transition-colors flex items-center justify-center ${isKpiMode ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}><AlertCircle className="w-3.5 h-3.5 mr-1" /> KPI</button>
-                    </div>
+                    {hasViewMode('kpi') && (
+                      <div className="flex bg-gray-200 p-1 rounded-lg">
+                        <button onClick={() => setIsKpiMode(false)} className={`px-3 py-1.5 rounded-md text-xs md:text-sm font-semibold transition-colors ${!isKpiMode ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}>Mặc định</button>
+                        <button onClick={() => setIsKpiMode(true)} className={`px-3 py-1.5 rounded-md text-xs md:text-sm font-semibold transition-colors flex items-center justify-center ${isKpiMode ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-600 hover:text-gray-800'}`}><AlertCircle className="w-3.5 h-3.5 mr-1" /> KPI</button>
+                      </div>
+                    )}
                 </div>
-                {canCreateTask && (<button onClick={() => handleOpenForm()} className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl flex items-center justify-center transition-colors shadow-sm font-medium"><Plus className="w-5 h-5 mr-1" /> Thêm công việc</button>)}
-              </div>
-              <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-6 flex flex-col md:flex-row gap-3 md:items-center">
-                <div className="relative flex-1"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" /><input type="text" placeholder="Tìm nội dung, người làm..." className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
-                <select className="border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm font-medium" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)}><option value="all">Tất cả tháng</option>{Array.from({length: 12}, (_, i) => (<option key={i+1} value={i+1}>Tháng {i+1}</option>))}</select>
+                {activeTab === 'dashboard' ? (
+                  <select className="w-full md:w-auto bg-white border border-gray-300 rounded-lg px-4 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium" value={filterYear} onChange={(e) => setFilterYear(parseInt(e.target.value))}><option value={2025}>Năm 2025</option><option value={2026}>Năm 2026</option><option value={2027}>Năm 2027</option></select>
+                ) : (
+                  hasPerm('canCreate') && <button onClick={() => handleOpenForm()} className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl flex items-center justify-center transition-colors shadow-sm font-medium"><Plus className="w-5 h-5 mr-1" /> Thêm công việc</button>
+                )}
               </div>
 
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 flex-1 overflow-hidden flex flex-col">
-                <div className="overflow-auto h-full">
-                  <table className="w-full text-left border-collapse min-w-[320px] md:min-w-[800px]">
-                    <thead className="sticky top-0 z-20 bg-gray-50 shadow-sm">
-                      <tr className="text-xs md:text-sm font-semibold text-gray-600 border-b border-gray-200">
-                        <th className="p-4 whitespace-nowrap bg-gray-50">Nội dung công việc</th>
-                        <th className="p-4 whitespace-nowrap bg-gray-50">Phân loại</th>
-                        <th className="p-4 whitespace-nowrap bg-gray-50 hidden md:table-cell">Thời hạn</th>
-                        <th className="p-4 whitespace-nowrap bg-gray-50 hidden md:table-cell">Phụ trách</th>
-                        <th className="p-4 whitespace-nowrap bg-gray-50 hidden md:table-cell">Tiến độ</th>
-                        {isAdmin && <th className="p-4 whitespace-nowrap bg-gray-50 hidden md:table-cell">Nhóm</th>}
-                        <th className="p-4 text-center whitespace-nowrap bg-gray-50 hidden md:table-cell">Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 text-xs md:text-sm">
-                      {filteredTasks.length > 0 ? filteredTasks.map((task) => (
-                        <tr key={task.id} className="hover:bg-blue-50 transition-colors cursor-pointer" onClick={() => setViewingTask(task)}>
-                          <td className="p-4 max-w-[200px] md:max-w-xs">
-                            <div className="font-bold text-gray-800 line-clamp-2" title={task.noiDung}>{task.noiDung}</div>
-                            <div className="text-[11px] md:text-xs text-gray-500 line-clamp-2 mt-1" title={task.chiTiet}>{task.chiTiet}</div>
-                            <div className="mt-2 flex flex-wrap gap-2 md:hidden">
-                               <span className="text-[10px] text-gray-600 font-medium flex items-center"><Calendar className="w-3 h-3 mr-1"/>{task.thoiHan || '---'}</span>
-                               <span className="text-[10px] font-bold" style={{color: STATUS_COLORS[task.tienDo]}}>{task.tienDo} ({task.tyLe}%)</span>
-                            </div>
-                          </td>
-                          <td className="p-4">
-                            <span className={`inline-flex items-center px-2 py-1 rounded border whitespace-nowrap shadow-sm text-[10px] md:text-xs font-bold ${CATEGORY_COLORS[task.phanLoai] || 'bg-gray-50 text-gray-700 border-gray-200'}`}>{task.phanLoai}</span>
-                          </td>
-                          <td className="p-4 text-gray-600 font-medium whitespace-nowrap hidden md:table-cell">{task.thoiHan ? (!isNaN(new Date(task.thoiHan).getTime()) ? new Date(task.thoiHan).toLocaleDateString('vi-VN') : task.thoiHan) : '---'}</td>
-                          <td className="p-4 text-gray-800 font-medium hidden md:table-cell"><div className="flex flex-wrap gap-1">{task.nguoiPhuTrach.split(',').map((name, i) => (<span key={i} className="inline-block bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] md:text-xs border border-blue-100 whitespace-nowrap">{name.trim()}</span>))}</div></td>
-                          <td className="p-4 hidden md:table-cell"><span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold whitespace-nowrap shadow-sm" style={{ backgroundColor: `${STATUS_COLORS[task.tienDo]}15`, color: STATUS_COLORS[task.tienDo], border: `1px solid ${STATUS_COLORS[task.tienDo]}40` }}>{getStatusIcon(task.tienDo)} {task.tienDo}</span></td>
-                          {isAdmin && (<td className="p-4 hidden md:table-cell"><span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-1 rounded text-[10px] md:text-xs font-bold whitespace-nowrap">{task.nhom}</span></td>)}
-                          <td className="p-4 text-center hidden md:table-cell">
-                            <div className="flex items-center justify-center space-x-2">
-                              <button type="button" onClick={(e) => { e.stopPropagation(); handleOpenForm(task); }} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg"><Edit className="w-4 h-4" /></button>
-                              {canDeleteTask && (<button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }} className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg"><Trash2 className="w-4 h-4" /></button>)}
-                            </div>
-                          </td>
-                        </tr>
-                      )) : (<tr><td colSpan="7" className="p-8 text-center text-gray-500">Không tìm thấy công việc nào.</td></tr>)}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              {activeTab === 'dashboard' && (
+                <>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
+                    <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row md:items-center justify-center md:justify-start text-center md:text-left"><div className="bg-blue-100 p-3 rounded-full text-blue-600 mx-auto md:mx-0 mb-2 md:mb-0 md:mr-4"><ListTodo className="w-6 h-6 md:w-8 md:h-8" /></div><div><p className="text-xs md:text-sm text-gray-500 font-medium">Tổng việc</p><h3 className="text-xl md:text-2xl font-bold text-gray-800">{stats.total}</h3></div></div>
+                    <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row md:items-center justify-center md:justify-start text-center md:text-left"><div className="bg-green-100 p-3 rounded-full text-green-600 mx-auto md:mx-0 mb-2 md:mb-0 md:mr-4"><CheckCircle className="w-6 h-6 md:w-8 md:h-8" /></div><div><p className="text-xs md:text-sm text-gray-500 font-medium">Hoàn thành</p><h3 className="text-xl md:text-2xl font-bold text-gray-800">{stats.completed}</h3></div></div>
+                    <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row md:items-center justify-center md:justify-start text-center md:text-left"><div className="bg-orange-100 p-3 rounded-full text-orange-500 mx-auto md:mx-0 mb-2 md:mb-0 md:mr-4"><Clock className="w-6 h-6 md:w-8 md:h-8" /></div><div><p className="text-xs md:text-sm text-gray-500 font-medium">Đang làm</p><h3 className="text-xl md:text-2xl font-bold text-gray-800">{stats.inProgress}</h3></div></div>
+                    <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row md:items-center justify-center md:justify-start text-center md:text-left"><div className="bg-red-100 p-3 rounded-full text-red-600 mx-auto md:mx-0 mb-2 md:mb-0 md:mr-4"><AlertCircle className="w-6 h-6 md:w-8 md:h-8" /></div><div><p className="text-xs md:text-sm text-gray-500 font-medium">Quá hạn</p><h3 className="text-xl md:text-2xl font-bold text-gray-800">{stats.overdue}</h3></div></div>
+                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 lg:col-span-2">
+                      <h3 className="text-base md:text-lg font-bold text-gray-800 mb-6 flex items-center"><BarChart2 className="w-5 h-5 mr-2 text-blue-500" /> Thống kê theo tháng</h3>
+                      <div className="h-64 md:h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={barChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" /><XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#6b7280', fontSize: 12}} /><YAxis axisLine={false} tickLine={false} tick={{fill: '#6b7280', fontSize: 12}} /><Tooltip cursor={{fill: '#f3f4f6'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} /><Legend wrapperStyle={{paddingTop: '10px', fontSize: 12}} /><Bar dataKey="Hoàn thành" stackId="a" fill="#22c55e" radius={[0, 0, 4, 4]} barSize={20} /><Bar dataKey="Chưa xong" stackId="a" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={20} /></BarChart></ResponsiveContainer></div>
+                    </div>
+                    <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center">
+                      <h3 className="text-base md:text-lg font-bold text-gray-800 mb-2 flex items-center w-full"><PieChartIcon className="w-5 h-5 mr-2 text-blue-500" /> Tỷ lệ trạng thái</h3>
+                      <div className="h-56 w-full relative"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={pieChartData} innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value">{pieChartData.map((entry, index) => (<Cell key={`cell-${index}`} fill={STATUS_COLORS[entry.name]} />))}</Pie><Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} /></PieChart></ResponsiveContainer><div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"><span className="text-2xl font-bold text-gray-800">{stats.avgRate}%</span><span className="text-[10px] text-gray-500 uppercase tracking-wider">T.Bình HT</span></div></div>
+                      <div className="w-full mt-4 space-y-2">{pieChartData.map((item, idx) => (<div key={idx} className="flex justify-between items-center text-xs md:text-sm"><div className="flex items-center"><span className="w-2.5 h-2.5 rounded-full mr-2" style={{backgroundColor: STATUS_COLORS[item.name]}}></span><span className="text-gray-600">{item.name}</span></div><span className="font-semibold text-gray-800">{item.value}</span></div>))}</div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {activeTab === 'tasks' && (
+                <>
+                  <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-6 flex flex-col md:flex-row gap-3 md:items-center">
+                    <div className="relative flex-1"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" /><input type="text" placeholder="Tìm nội dung, người làm..." className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+                    <select className="border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm font-medium" value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)}><option value="all">Tất cả tháng</option>{Array.from({length: 12}, (_, i) => (<option key={i+1} value={i+1}>Tháng {i+1}</option>))}</select>
+                  </div>
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-100 flex-1 overflow-hidden flex flex-col">
+                    <div className="overflow-auto h-full">
+                      <table className="w-full text-left border-collapse min-w-[320px] md:min-w-[800px]">
+                        <thead className="sticky top-0 z-20 bg-gray-50 shadow-sm">
+                          <tr className="text-xs md:text-sm font-semibold text-gray-600 border-b border-gray-200"><th className="p-4 whitespace-nowrap bg-gray-50">Nội dung công việc</th><th className="p-4 whitespace-nowrap bg-gray-50">Phân loại</th><th className="p-4 whitespace-nowrap bg-gray-50 hidden md:table-cell">Thời hạn</th><th className="p-4 whitespace-nowrap bg-gray-50 hidden md:table-cell">Phụ trách</th><th className="p-4 whitespace-nowrap bg-gray-50 hidden md:table-cell">Tiến độ</th>{hasPerm('canViewAllGroups') && <th className="p-4 whitespace-nowrap bg-gray-50 hidden md:table-cell">Nhóm</th>}<th className="p-4 text-center whitespace-nowrap bg-gray-50 hidden md:table-cell">Thao tác</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 text-xs md:text-sm">
+                          {filteredTasks.length > 0 ? filteredTasks.map((task) => (
+                            <tr key={task.id} className="hover:bg-blue-50 transition-colors cursor-pointer" onClick={() => setViewingTask(task)}>
+                              <td className="p-4 max-w-[200px] md:max-w-xs"><div className="font-bold text-gray-800 line-clamp-2" title={task.noiDung}>{task.noiDung}</div><div className="text-[11px] md:text-xs text-gray-500 line-clamp-2 mt-1" title={task.chiTiet}>{task.chiTiet}</div><div className="mt-2 flex flex-wrap gap-2 md:hidden"><span className="text-[10px] text-gray-600 font-medium flex items-center"><Calendar className="w-3 h-3 mr-1"/>{task.thoiHan || '---'}</span><span className="text-[10px] font-bold" style={{color: STATUS_COLORS[task.tienDo]}}>{task.tienDo} ({task.tyLe}%)</span></div></td>
+                              <td className="p-4"><span className={`inline-flex items-center px-2 py-1 rounded border whitespace-nowrap shadow-sm text-[10px] md:text-xs font-bold ${CATEGORY_COLORS[task.phanLoai] || 'bg-gray-50 text-gray-700 border-gray-200'}`}>{task.phanLoai}</span></td>
+                              <td className="p-4 text-gray-600 font-medium whitespace-nowrap hidden md:table-cell">{task.thoiHan ? (!isNaN(new Date(task.thoiHan).getTime()) ? new Date(task.thoiHan).toLocaleDateString('vi-VN') : task.thoiHan) : '---'}</td>
+                              <td className="p-4 text-gray-800 font-medium hidden md:table-cell"><div className="flex flex-wrap gap-1">{task.nguoiPhuTrach.split(',').map((name, i) => (<span key={i} className="inline-block bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] md:text-xs border border-blue-100 whitespace-nowrap">{name.trim()}</span>))}</div></td>
+                              <td className="p-4 hidden md:table-cell"><span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold whitespace-nowrap shadow-sm" style={{ backgroundColor: `${STATUS_COLORS[task.tienDo]}15`, color: STATUS_COLORS[task.tienDo], border: `1px solid ${STATUS_COLORS[task.tienDo]}40` }}>{getStatusIcon(task.tienDo)} {task.tienDo}</span></td>
+                              {hasPerm('canViewAllGroups') && (<td className="p-4 hidden md:table-cell"><span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-1 rounded text-[10px] md:text-xs font-bold whitespace-nowrap">{task.nhom}</span></td>)}
+                              <td className="p-4 text-center hidden md:table-cell"><div className="flex items-center justify-center space-x-2"><button type="button" onClick={(e) => { e.stopPropagation(); handleOpenForm(task); }} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg"><Edit className="w-4 h-4" /></button>{hasPerm('canDelete') && (<button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }} className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg"><Trash2 className="w-4 h-4" /></button>)}</div></td>
+                            </tr>
+                          )) : (<tr><td colSpan="7" className="p-8 text-center text-gray-500">Không tìm thấy công việc nào.</td></tr>)}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
-          {activeTab === 'users' && isAdmin && (
+          {/* QUẢN LÝ QUYỀN (ROLES) */}
+          {activeTab === 'roles' && currentUser.role === 'Admin' && (
             <div className="pb-8">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4"><h2 className="text-xl md:text-2xl font-bold text-gray-800">Tài khoản & Phân quyền</h2><button onClick={() => handleOpenUserForm()} className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl flex items-center justify-center transition-colors shadow-sm font-medium"><Plus className="w-5 h-5 mr-1" /> Thêm tài khoản</button></div>
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4"><h2 className="text-xl md:text-2xl font-bold text-gray-800">Quản lý Phân quyền</h2><button onClick={() => handleOpenRoleForm()} className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl flex items-center justify-center transition-colors shadow-sm font-medium"><Plus className="w-5 h-5 mr-1" /> Thêm Quyền mới</button></div>
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
                 <table className="min-w-full text-left border-collapse">
-                  <thead className="sticky top-0 bg-gray-50 z-10">
-                    <tr className="border-b border-gray-200 text-xs md:text-sm font-semibold text-gray-600">
-                      <th className="p-4 whitespace-nowrap bg-gray-50">Họ và tên</th><th className="p-4 whitespace-nowrap bg-gray-50">Tên đăng nhập</th><th className="p-4 whitespace-nowrap bg-gray-50">Nhóm</th><th className="p-4 whitespace-nowrap bg-gray-50">Quyền hạn</th><th className="p-4 text-center whitespace-nowrap bg-gray-50">Thao tác</th>
-                    </tr>
-                  </thead>
+                  <thead className="bg-gray-50"><tr className="border-b border-gray-200 text-xs md:text-sm font-semibold text-gray-600"><th className="p-4">Tên Quyền</th><th className="p-4">Chức năng (Sửa/Xóa/Tạo)</th><th className="p-4">Phạm vi xem</th><th className="p-4">Tab hiển thị</th><th className="p-4 text-center">Thao tác</th></tr></thead>
                   <tbody className="divide-y divide-gray-100 text-xs md:text-sm">
-                    {usersList.map(user => (<tr key={user.id} className="hover:bg-gray-50 transition-colors"><td className="p-4 font-bold text-gray-800 whitespace-nowrap">{user.fullName}</td><td className="p-4 font-mono text-gray-500">{user.username}</td><td className="p-4 text-indigo-700 font-bold whitespace-nowrap">{user.nhom}</td><td className="p-4"><span className={`px-2.5 py-1 rounded-md text-[10px] md:text-xs font-bold border whitespace-nowrap ${user.role==='Admin' ? 'bg-rose-50 text-rose-700 border-rose-200' : user.role==='Trưởng nhóm' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-50 text-slate-700 border-slate-200'}`}>{user.role}</span></td><td className="p-4 text-center"><div className="flex items-center justify-center space-x-2"><button type="button" onClick={() => handleOpenUserForm(user)} className="p-2 bg-white border border-gray-200 text-blue-600 hover:bg-blue-50 rounded-lg shadow-sm"><Edit className="w-4 h-4" /></button><button type="button" onClick={() => handleDeleteUser(user.id)} disabled={user.id === currentUser.id} className={`p-2 bg-white border border-gray-200 rounded-lg shadow-sm ${user.id === currentUser.id ? 'text-gray-300' : 'text-red-600 hover:bg-red-50'}`}><Trash2 className="w-4 h-4" /></button></div></td></tr>))}
+                    {rolesList.map(r => (
+                      <tr key={r.id} className="hover:bg-gray-50">
+                        <td className="p-4 font-bold text-indigo-700">{r.name} {['Admin', 'Trưởng nhóm', 'Thành viên'].includes(r.name) && <span className="ml-2 text-[10px] bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">Mặc định</span>}</td>
+                        <td className="p-4 text-gray-600 space-y-1">
+                          <div className="flex items-center gap-1">{r.permissions.canCreate ? <CheckCircle className="w-3 h-3 text-green-500"/> : <Circle className="w-3 h-3 text-gray-300"/>} Tạo việc mới</div>
+                          <div className="flex items-center gap-1">{r.permissions.canEditFull ? <CheckCircle className="w-3 h-3 text-green-500"/> : <Circle className="w-3 h-3 text-gray-300"/>} Chỉnh sửa toàn bộ (nếu không chỉ sửa tiến độ)</div>
+                          <div className="flex items-center gap-1">{r.permissions.canDelete ? <CheckCircle className="w-3 h-3 text-green-500"/> : <Circle className="w-3 h-3 text-gray-300"/>} Xóa việc</div>
+                        </td>
+                        <td className="p-4 text-gray-600">
+                          <div className="font-semibold">{r.permissions.canViewAllGroups ? 'Tất cả các nhóm' : 'Chỉ nhóm của mình'}</div>
+                          <div className="text-[10px] text-gray-400 mt-1">Danh mục: {r.permissions.allowedCategories?.length > 0 ? r.permissions.allowedCategories.join(', ') : 'Tất cả'}</div>
+                        </td>
+                        <td className="p-4">
+                          <div className="flex flex-wrap gap-1">
+                            {r.permissions.viewModes.map(m => <span key={m} className="bg-gray-200 text-gray-700 px-2 py-0.5 rounded text-[10px] font-medium">{m === 'personal' ? 'Của tôi' : m === 'group' ? 'Nhóm' : m === 'all' ? 'Tất cả' : 'KPI'}</span>)}
+                          </div>
+                        </td>
+                        <td className="p-4 text-center"><div className="flex items-center justify-center space-x-2"><button onClick={() => handleOpenRoleForm(r)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit className="w-4 h-4"/></button><button onClick={() => handleDeleteRole(r.id, r.name)} disabled={['Admin', 'Trưởng nhóm', 'Thành viên'].includes(r.name)} className={`p-2 rounded-lg ${['Admin', 'Trưởng nhóm', 'Thành viên'].includes(r.name) ? 'text-gray-300' : 'text-red-600 hover:bg-red-50'}`}><Trash2 className="w-4 h-4"/></button></div></td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
             </div>
           )}
 
-          {activeTab === 'groups' && isAdmin && (
+          {/* QUẢN LÝ TÀI KHOẢN (CẬP NHẬT ĐỂ CHỌN QUYỀN TỪ ROLES LIST) */}
+          {activeTab === 'users' && currentUser.role === 'Admin' && (
+            <div className="pb-8">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4"><h2 className="text-xl md:text-2xl font-bold text-gray-800">Tài khoản Hệ thống</h2><button onClick={() => handleOpenUserForm()} className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl flex items-center justify-center transition-colors shadow-sm font-medium"><Plus className="w-5 h-5 mr-1" /> Thêm tài khoản</button></div>
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+                <table className="min-w-full text-left border-collapse"><thead className="bg-gray-50"><tr className="border-b border-gray-200 text-xs md:text-sm font-semibold text-gray-600"><th className="p-4">Họ và tên</th><th className="p-4">Tên đăng nhập</th><th className="p-4">Nhóm</th><th className="p-4">Quyền hạn</th><th className="p-4 text-center">Thao tác</th></tr></thead><tbody className="divide-y divide-gray-100 text-xs md:text-sm">{usersList.map(user => (<tr key={user.id} className="hover:bg-gray-50"><td className="p-4 font-bold text-gray-800">{user.fullName}</td><td className="p-4 font-mono text-gray-500">{user.username}</td><td className="p-4 text-indigo-700 font-bold">{user.nhom}</td><td className="p-4"><span className="px-2.5 py-1 rounded-md text-[10px] md:text-xs font-bold border bg-slate-50 text-slate-700 border-slate-200">{user.role}</span></td><td className="p-4 text-center"><div className="flex items-center justify-center space-x-2"><button type="button" onClick={() => handleOpenUserForm(user)} className="p-2 border border-gray-200 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit className="w-4 h-4" /></button><button type="button" onClick={() => handleDeleteUser(user.id)} disabled={user.id === currentUser.id} className={`p-2 border border-gray-200 rounded-lg ${user.id === currentUser.id ? 'text-gray-300' : 'text-red-600 hover:bg-red-50'}`}><Trash2 className="w-4 h-4" /></button></div></td></tr>))}</tbody></table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'groups' && currentUser.role === 'Admin' && (
             <div className="pb-8">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4"><h2 className="text-xl md:text-2xl font-bold text-gray-800">Danh mục Nhóm</h2><button onClick={() => handleOpenGroupForm()} className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl flex items-center justify-center transition-colors shadow-sm font-medium"><Plus className="w-5 h-5 mr-1" /> Thêm nhóm</button></div>
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden max-w-2xl">
-                <table className="w-full text-left border-collapse">
-                  <thead className="sticky top-0 bg-gray-50 z-10">
-                    <tr className="border-b border-gray-200 text-xs md:text-sm font-semibold text-gray-600"><th className="p-4 w-16 text-center bg-gray-50">STT</th><th className="p-4 bg-gray-50">Tên Nhóm</th><th className="p-4 text-center w-24 bg-gray-50">Thao tác</th></tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 text-xs md:text-sm">
-                    {groupsList.map((group, idx) => (<tr key={group} className="hover:bg-gray-50 transition-colors"><td className="p-4 text-center text-gray-500 font-medium">{idx + 1}</td><td className="p-4 font-bold text-indigo-700">{group}</td><td className="p-4 text-center"><div className="flex items-center justify-center space-x-2"><button type="button" onClick={() => handleOpenGroupForm(group)} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg"><Edit className="w-4 h-4" /></button><button type="button" onClick={() => handleDeleteGroup(group)} disabled={group === 'Khác'} className={`p-1.5 rounded-lg ${group === 'Khác' ? 'text-gray-300' : 'text-red-600 hover:bg-red-100'}`}><Trash2 className="w-4 h-4" /></button></div></td></tr>))}
-                  </tbody>
-                </table>
-              </div>
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden max-w-2xl"><table className="w-full text-left border-collapse"><thead className="bg-gray-50"><tr className="border-b border-gray-200 text-xs md:text-sm font-semibold text-gray-600"><th className="p-4 w-16 text-center">STT</th><th className="p-4">Tên Nhóm</th><th className="p-4 text-center w-24">Thao tác</th></tr></thead><tbody className="divide-y divide-gray-100 text-xs md:text-sm">{groupsList.map((group, idx) => (<tr key={group} className="hover:bg-gray-50"><td className="p-4 text-center text-gray-500 font-medium">{idx + 1}</td><td className="p-4 font-bold text-indigo-700">{group}</td><td className="p-4 text-center"><div className="flex items-center justify-center space-x-2"><button type="button" onClick={() => handleOpenGroupForm(group)} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg"><Edit className="w-4 h-4" /></button><button type="button" onClick={() => handleDeleteGroup(group)} disabled={group === 'Khác'} className={`p-1.5 rounded-lg ${group === 'Khác' ? 'text-gray-300' : 'text-red-600 hover:bg-red-100'}`}><Trash2 className="w-4 h-4" /></button></div></td></tr>))}</tbody></table></div>
             </div>
           )}
 
           {activeTab === 'settings' && (
             <div className="pb-8">
-              <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-6">{isAdmin ? 'Cài đặt Hệ thống' : 'Cài đặt Ứng dụng'}</h2>
-              <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-2' : 'max-w-xl'} gap-6`}>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"><div className="flex items-center space-x-3 mb-4"><div className="bg-green-100 p-2 rounded-lg text-green-600"><Key className="w-6 h-6"/></div><h3 className="text-lg font-bold text-gray-800">Đổi mật khẩu</h3></div>{currentUser.id === 'admin_core' ? (<div className="p-4 bg-amber-50 text-amber-800 rounded-xl text-sm border border-amber-200 font-medium">Admin mặc định không thể đổi tại đây.</div>) : (<form onSubmit={handleChangePassword} className="space-y-4"><div><label className="block text-xs font-bold text-gray-700 mb-1.5">Mật khẩu hiện tại</label><input type="password" required value={passwordForm.current} onChange={e => setPasswordForm({...passwordForm, current: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm shadow-sm" placeholder="Nhập mật khẩu đang dùng" /></div><div><label className="block text-xs font-bold text-gray-700 mb-1.5">Mật khẩu mới</label><input type="password" required value={passwordForm.new} onChange={e => setPasswordForm({...passwordForm, new: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm shadow-sm" placeholder="Nhập mật khẩu mới" /></div><div><label className="block text-xs font-bold text-gray-700 mb-1.5">Xác nhận mật khẩu</label><input type="password" required value={passwordForm.confirm} onChange={e => setPasswordForm({...passwordForm, confirm: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm shadow-sm" placeholder="Nhập lại mật khẩu mới" /></div><button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-4 rounded-xl transition-colors shadow-sm text-sm mt-2">Cập nhật mật khẩu</button></form>)}</div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"><div className="flex items-center space-x-3 mb-4"><div className="bg-purple-100 p-2 rounded-lg text-purple-600"><Bell className="w-6 h-6"/></div><h3 className="text-lg font-bold text-gray-800">Thông báo đẩy</h3></div><div className="space-y-4"><p className="text-sm text-gray-600 mb-4">Kích hoạt thông báo để nhận cảnh báo Deadline đúng 15h mỗi ngày.</p><button onClick={requestNotificationPermission} className="w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2.5 rounded-xl flex items-center justify-center transition-colors shadow-sm font-medium text-sm"><Bell className="w-5 h-5 mr-2 text-yellow-500" /> Bật cảnh báo trình duyệt</button></div></div>
-                {isAdmin && (<div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"><div className="flex items-center space-x-3 mb-4"><div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Save className="w-6 h-6"/></div><h3 className="text-lg font-bold text-gray-800">Cơ sở dữ liệu Sheets</h3></div><div><label className="block text-sm font-medium text-gray-700 mb-2">API URL</label><input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs md:text-sm text-gray-600 bg-gray-50" value={sheetUrl} onChange={(e) => setSheetUrl(e.target.value)} /></div></div>)}
+              <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-6">{currentUser.role === 'Admin' ? 'Cài đặt Hệ thống' : 'Cài đặt Ứng dụng'}</h2>
+              <div className={`grid grid-cols-1 ${currentUser.role === 'Admin' ? 'md:grid-cols-2' : 'max-w-xl'} gap-6`}>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"><div className="flex items-center space-x-3 mb-4"><div className="bg-green-100 p-2 rounded-lg text-green-600"><Key className="w-6 h-6"/></div><h3 className="text-lg font-bold text-gray-800">Đổi mật khẩu</h3></div>{currentUser.id === 'admin_core' ? (<div className="p-4 bg-amber-50 text-amber-800 rounded-xl text-sm border border-amber-200 font-medium">Admin mặc định không thể đổi tại đây.</div>) : (<form onSubmit={handleChangePassword} className="space-y-4"><div><label className="block text-xs font-bold text-gray-700 mb-1.5">Mật khẩu hiện tại</label><input type="password" required value={passwordForm.current} onChange={e => setPasswordForm({...passwordForm, current: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl outline-none text-sm shadow-sm" /></div><div><label className="block text-xs font-bold text-gray-700 mb-1.5">Mật khẩu mới</label><input type="password" required value={passwordForm.new} onChange={e => setPasswordForm({...passwordForm, new: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl outline-none text-sm shadow-sm" /></div><div><label className="block text-xs font-bold text-gray-700 mb-1.5">Xác nhận</label><input type="password" required value={passwordForm.confirm} onChange={e => setPasswordForm({...passwordForm, confirm: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl outline-none text-sm shadow-sm" /></div><button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-4 rounded-xl transition-colors shadow-sm text-sm mt-2">Cập nhật</button></form>)}</div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"><div className="flex items-center space-x-3 mb-4"><div className="bg-purple-100 p-2 rounded-lg text-purple-600"><Bell className="w-6 h-6"/></div><h3 className="text-lg font-bold text-gray-800">Thông báo đẩy</h3></div><button onClick={requestNotificationPermission} className="w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2.5 rounded-xl flex items-center justify-center font-medium text-sm"><Bell className="w-5 h-5 mr-2 text-yellow-500" /> Bật cảnh báo trình duyệt</button></div>
+                {currentUser.role === 'Admin' && (<div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"><div className="flex items-center space-x-3 mb-4"><div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Save className="w-6 h-6"/></div><h3 className="text-lg font-bold text-gray-800">Cơ sở dữ liệu Sheets</h3></div><div><label className="block text-sm font-medium text-gray-700 mb-2">API URL</label><input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-xl outline-none font-mono text-xs text-gray-600 bg-gray-50" value={sheetUrl} onChange={(e) => setSheetUrl(e.target.value)} /></div></div>)}
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {viewingTask && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center z-50 md:p-4 transition-opacity" onClick={() => setViewingTask(null)}><div className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto transform transition-transform md:translate-y-0 translate-y-0" onClick={e => e.stopPropagation()}><div className="p-5 md:p-6 border-b border-gray-100 flex justify-between items-start sticky top-0 bg-white z-10"><div className="pr-4"><div className="flex flex-wrap gap-2 mb-2"><span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] md:text-xs font-bold border whitespace-nowrap shadow-sm ${CATEGORY_COLORS[viewingTask.phanLoai] || 'bg-gray-50 text-gray-700 border-gray-200'}`}>{viewingTask.phanLoai}</span><span className="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] md:text-xs font-bold border border-indigo-200 bg-indigo-50 text-indigo-700 whitespace-nowrap shadow-sm">{viewingTask.nhom}</span></div><h3 className="text-lg md:text-xl font-bold text-gray-800 leading-tight">{viewingTask.noiDung}</h3></div><button onClick={() => setViewingTask(null)} className="bg-gray-100 p-1.5 rounded-full text-gray-500 hover:bg-gray-200 transition-colors">&times;</button></div><div className="p-5 md:p-6 space-y-6"><div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6"><div><p className="text-xs md:text-sm text-gray-500 mb-1 font-medium">Phụ trách</p><div className="font-bold text-gray-800">{viewingTask.nguoiPhuTrach || '---'}</div></div><div><p className="text-xs md:text-sm text-gray-500 mb-1 font-medium">Thời hạn</p><div className="flex items-center font-bold text-gray-800 text-sm md:text-base"><Calendar className="w-4 h-4 mr-2 text-blue-500" />{viewingTask.thoiHan || '---'}</div></div><div><p className="text-xs md:text-sm text-gray-500 mb-1 font-medium">Trạng thái</p><div className="flex items-center space-x-3"><span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs md:text-sm font-bold shadow-sm" style={{ backgroundColor: `${STATUS_COLORS[viewingTask.tienDo]}15`, color: STATUS_COLORS[viewingTask.tienDo], border: `1px solid ${STATUS_COLORS[viewingTask.tienDo]}40` }}>{getStatusIcon(viewingTask.tienDo)}{viewingTask.tienDo}</span><span className="font-black text-gray-700 text-lg">{viewingTask.tyLe}%</span></div></div></div><div className="pt-4 border-t border-gray-100"><p className="text-xs md:text-sm text-gray-500 mb-2 font-medium">Chi tiết</p><div className="bg-gray-50 p-4 rounded-xl text-gray-700 whitespace-pre-wrap text-sm border border-gray-100 leading-relaxed">{viewingTask.chiTiet || 'Chưa có mô tả.'}</div></div><div className="pt-2"><p className="text-xs md:text-sm text-gray-500 mb-2 font-medium">Báo cáo</p><div className="bg-blue-50 p-4 rounded-xl text-gray-800 whitespace-pre-wrap text-sm border border-blue-100 leading-relaxed font-medium">{viewingTask.baoCao || 'Chưa có cập nhật.'}</div></div></div>
-          {/* ACTION BUTTONS CHO MOBILE */}
-          <div className="p-4 md:p-5 border-t border-gray-100 bg-gray-50 rounded-b-none md:rounded-b-2xl flex flex-wrap gap-2 justify-end pb-8 md:pb-5">
-              <button onClick={() => { handleOpenForm(viewingTask); setViewingTask(null); }} className="px-4 py-2 bg-white border border-blue-300 text-blue-600 rounded-xl hover:bg-blue-50 transition-colors flex items-center shadow-sm font-bold text-sm"><Edit className="w-4 h-4 mr-2" /> Sửa / Cập nhật</button>
-              {canDeleteTask && <button onClick={() => handleDeleteTask(viewingTask.id)} className="px-4 py-2 bg-white border border-red-300 text-red-600 rounded-xl hover:bg-red-50 transition-colors flex items-center shadow-sm font-bold text-sm"><Trash2 className="w-4 h-4 mr-2" /> Xóa</button>}
-              <button onClick={() => setViewingTask(null)} className="px-4 py-2 bg-gray-800 text-white rounded-xl hover:bg-gray-900 transition-colors shadow-sm font-bold text-sm">Đóng</button>
-          </div></div></div>
-      )}
-
+      {/* FORM CÔNG VIỆC CHÍNH */}
       {isFormOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center z-50 md:p-4" onClick={() => setIsFormOpen(false)}><div className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}><div className="p-5 md:p-6 border-b border-gray-100 flex justify-between items-center sticky top-0 bg-white z-10"><h3 className="text-lg md:text-xl font-bold text-gray-800">{editingTask ? (isMember ? 'Cập nhật tiến độ' : 'Sửa công việc') : 'Thêm công việc mới'}</h3><button onClick={() => setIsFormOpen(false)} className="bg-gray-100 p-1.5 rounded-full text-gray-500 hover:bg-gray-200 transition-colors">&times;</button></div><form onSubmit={handleSaveTask} className="p-5 md:p-6">{isMember && <div className="mb-6 bg-blue-50 text-blue-800 p-3 rounded-xl text-xs md:text-sm flex items-start border border-blue-100 shadow-sm"><Shield className="w-5 h-5 mr-2 shrink-0 text-blue-500" />Thành viên chỉ được phép cập nhật Tiến độ, Tỷ lệ và Báo cáo.</div>}<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6"><div className="sm:col-span-2"><label className="block text-xs md:text-sm font-bold text-gray-700 mb-1.5">Nội dung <span className="text-red-500">*</span></label><input type="text" required disabled={isMember} value={formData.noiDung} onChange={e => setFormData({...formData, noiDung: e.target.value})} className={`w-full px-4 py-2.5 border border-gray-300 rounded-xl outline-none text-sm ${isMember ? 'bg-gray-100 text-gray-500' : 'focus:ring-2 focus:ring-blue-500 bg-white shadow-sm'}`} /></div><div><label className="block text-xs md:text-sm font-bold text-gray-700 mb-1.5">Phân loại</label><select disabled={isMember} value={formData.phanLoai} onChange={e => setFormData({...formData, phanLoai: e.target.value})} className={`w-full px-4 py-2.5 border border-gray-300 rounded-xl outline-none text-sm font-medium ${isMember ? 'bg-gray-100 text-gray-500' : 'focus:ring-2 focus:ring-blue-500 shadow-sm'}`}>{Object.keys(CATEGORY_COLORS).map(cat => <option key={cat} value={cat}>{cat}</option>)}</select></div>{isAdmin && (<div><label className="block text-xs md:text-sm font-bold text-indigo-700 mb-1.5">Giao cho Nhóm <span className="text-red-500">*</span></label><select value={formData.nhom} onChange={e => setFormData({...formData, nhom: e.target.value})} className="w-full px-4 py-2.5 border border-indigo-300 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm text-sm font-medium">{groupsList.map(g => <option key={g} value={g}>{g}</option>)}</select></div>)}<div className={isAdmin ? '' : 'sm:col-span-2'}><label className="block text-xs md:text-sm font-bold text-gray-700 mb-1.5">Người phụ trách</label><input type="text" disabled={isMember} value={formData.nguoiPhuTrach} onChange={e => setFormData({...formData, nguoiPhuTrach: e.target.value})} placeholder="Dấu phẩy giữa các tên" className={`w-full px-4 py-2.5 border border-gray-300 rounded-xl outline-none text-sm ${isMember ? 'bg-gray-100 text-gray-500' : 'focus:ring-2 focus:ring-blue-500 shadow-sm'}`} /></div><div className="sm:col-span-2"><label className="block text-xs md:text-sm font-bold text-gray-700 mb-1.5">Mô tả chi tiết</label><textarea rows="2" disabled={isMember} value={formData.chiTiet} onChange={e => setFormData({...formData, chiTiet: e.target.value})} className={`w-full px-4 py-2.5 border border-gray-300 rounded-xl outline-none text-sm ${isMember ? 'bg-gray-100 text-gray-500' : 'focus:ring-2 focus:ring-blue-500 shadow-sm'}`}></textarea></div><div><label className="block text-xs md:text-sm font-bold text-gray-700 mb-1.5">Đơn vị phối hợp</label><input type="text" disabled={isMember} value={formData.phoiHop} onChange={e => setFormData({...formData, phoiHop: e.target.value})} className={`w-full px-4 py-2.5 border border-gray-300 rounded-xl outline-none text-sm ${isMember ? 'bg-gray-100 text-gray-500' : 'focus:ring-2 focus:ring-blue-500 shadow-sm'}`} /></div><div><label className="block text-xs md:text-sm font-bold text-gray-700 mb-1.5">Thời hạn</label><input type={formData.thoiHan && isNaN(new Date(formData.thoiHan).getTime()) ? "text" : "date"} disabled={isMember} value={formData.thoiHan} onChange={e => setFormData({...formData, thoiHan: e.target.value})} className={`w-full px-4 py-2.5 border border-gray-300 rounded-xl outline-none text-sm font-medium ${isMember ? 'bg-gray-100 text-gray-500' : 'focus:ring-2 focus:ring-blue-500 shadow-sm'}`} /></div><div className="bg-blue-50/70 p-4 md:p-5 rounded-2xl border border-blue-100 sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6 shadow-inner"><div><label className="block text-xs md:text-sm font-bold text-gray-900 mb-1.5">Trạng thái <span className="text-red-500">*</span></label><select value={formData.tienDo} onChange={e => { const val = e.target.value; setFormData({...formData, tienDo: val, tyLe: val === 'Hoàn thành' ? 100 : formData.tyLe}); }} className="w-full px-4 py-2.5 border border-blue-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white shadow-sm font-bold text-sm"><option value="Chưa bắt đầu">Chưa bắt đầu</option><option value="Đang thực hiện">Đang thực hiện</option><option value="Hoàn thành">Hoàn thành</option><option value="Quá hạn">Quá hạn</option></select></div><div><label className="block text-xs md:text-sm font-bold text-gray-900 mb-1.5">Tỷ lệ: <span className="text-blue-700">{formData.tyLe}%</span></label><div className="flex items-center mt-3.5"><input type="range" min="0" max="100" step="5" value={formData.tyLe} onChange={e => setFormData({...formData, tyLe: Number(e.target.value)})} className="w-full h-2.5 bg-blue-200 rounded-lg appearance-none cursor-pointer accent-blue-600 shadow-sm" /></div></div><div className="sm:col-span-2"><label className="block text-xs md:text-sm font-bold text-gray-900 mb-1.5">Nhật ký báo cáo</label><textarea rows="3" value={formData.baoCao} onChange={e => setFormData({...formData, baoCao: e.target.value})} className="w-full px-4 py-3 border border-blue-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white shadow-sm text-sm" placeholder="Ghi chú kết quả, vướng mắc..."></textarea></div></div></div><div className="mt-6 md:mt-8 flex justify-end space-x-3 pt-4 border-t border-gray-100 pb-4 md:pb-0"><button type="button" onClick={() => setIsFormOpen(false)} className="px-5 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-100 transition-colors font-medium text-sm shadow-sm bg-white">Hủy bỏ</button><button type="submit" className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors shadow-md text-sm">{editingTask ? 'Lưu cập nhật' : 'Tạo mới'}</button></div></form></div></div>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center z-50 md:p-4" onClick={() => setIsFormOpen(false)}><div className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}><div className="p-5 md:p-6 border-b border-gray-100 flex justify-between items-center sticky top-0 bg-white z-10"><h3 className="text-lg md:text-xl font-bold text-gray-800">{editingTask ? (hasPerm('canEditFull') ? 'Sửa công việc' : 'Cập nhật tiến độ') : 'Thêm công việc mới'}</h3><button onClick={() => setIsFormOpen(false)} className="bg-gray-100 p-1.5 rounded-full text-gray-500">&times;</button></div><form onSubmit={handleSaveTask} className="p-5 md:p-6">{!hasPerm('canEditFull') && editingTask && <div className="mb-6 bg-blue-50 text-blue-800 p-3 rounded-xl text-xs md:text-sm flex items-start border border-blue-100"><Shield className="w-5 h-5 mr-2 shrink-0 text-blue-500" />Quyền của bạn chỉ cho phép cập nhật Tiến độ, Tỷ lệ và Báo cáo.</div>}<div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6"><div className="sm:col-span-2"><label className="block text-xs md:text-sm font-bold text-gray-700 mb-1.5">Nội dung <span className="text-red-500">*</span></label><input type="text" required disabled={!hasPerm('canEditFull') && editingTask} value={formData.noiDung} onChange={e => setFormData({...formData, noiDung: e.target.value})} className={`w-full px-4 py-2.5 border border-gray-300 rounded-xl outline-none text-sm ${(!hasPerm('canEditFull') && editingTask) ? 'bg-gray-100' : 'bg-white'}`} /></div><div><label className="block text-xs md:text-sm font-bold text-gray-700 mb-1.5">Phân loại</label><select disabled={!hasPerm('canEditFull') && editingTask} value={formData.phanLoai} onChange={e => setFormData({...formData, phanLoai: e.target.value})} className="w-full px-4 py-2.5 border border-gray-300 rounded-xl outline-none text-sm">{Object.keys(CATEGORY_COLORS).map(cat => <option key={cat} value={cat}>{cat}</option>)}</select></div>{hasPerm('canViewAllGroups') && (<div><label className="block text-xs md:text-sm font-bold text-indigo-700 mb-1.5">Giao cho Nhóm</label><select value={formData.nhom} onChange={e => setFormData({...formData, nhom: e.target.value})} className="w-full px-4 py-2.5 border border-indigo-300 rounded-xl outline-none text-sm">{groupsList.map(g => <option key={g} value={g}>{g}</option>)}</select></div>)}<div className={hasPerm('canViewAllGroups') ? '' : 'sm:col-span-2'}><label className="block text-xs md:text-sm font-bold text-gray-700 mb-1.5">Người phụ trách</label><input type="text" disabled={!hasPerm('canEditFull') && editingTask} value={formData.nguoiPhuTrach} onChange={e => setFormData({...formData, nguoiPhuTrach: e.target.value})} className="w-full px-4 py-2.5 border border-gray-300 rounded-xl outline-none text-sm" /></div><div className="sm:col-span-2"><label className="block text-xs md:text-sm font-bold text-gray-700 mb-1.5">Mô tả chi tiết</label><textarea rows="2" disabled={!hasPerm('canEditFull') && editingTask} value={formData.chiTiet} onChange={e => setFormData({...formData, chiTiet: e.target.value})} className="w-full px-4 py-2.5 border border-gray-300 rounded-xl outline-none text-sm"></textarea></div><div><label className="block text-xs md:text-sm font-bold text-gray-700 mb-1.5">Phối hợp</label><input type="text" disabled={!hasPerm('canEditFull') && editingTask} value={formData.phoiHop} onChange={e => setFormData({...formData, phoiHop: e.target.value})} className="w-full px-4 py-2.5 border border-gray-300 rounded-xl outline-none text-sm" /></div><div><label className="block text-xs md:text-sm font-bold text-gray-700 mb-1.5">Thời hạn</label><input type={formData.thoiHan && isNaN(new Date(formData.thoiHan).getTime()) ? "text" : "date"} disabled={!hasPerm('canEditFull') && editingTask} value={formData.thoiHan} onChange={e => setFormData({...formData, thoiHan: e.target.value})} className="w-full px-4 py-2.5 border border-gray-300 rounded-xl outline-none text-sm" /></div><div className="bg-blue-50/70 p-4 rounded-2xl border border-blue-100 sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4"><div><label className="block text-xs md:text-sm font-bold text-gray-900 mb-1.5">Trạng thái <span className="text-red-500">*</span></label><select value={formData.tienDo} onChange={e => { const val = e.target.value; setFormData({...formData, tienDo: val, tyLe: val === 'Hoàn thành' ? 100 : formData.tyLe}); }} className="w-full px-4 py-2.5 border border-blue-300 rounded-xl outline-none bg-white text-sm font-bold"><option value="Chưa bắt đầu">Chưa bắt đầu</option><option value="Đang thực hiện">Đang thực hiện</option><option value="Hoàn thành">Hoàn thành</option><option value="Quá hạn">Quá hạn</option></select></div><div><label className="block text-xs md:text-sm font-bold text-gray-900 mb-1.5">Tỷ lệ: <span className="text-blue-700">{formData.tyLe}%</span></label><input type="range" min="0" max="100" step="5" value={formData.tyLe} onChange={e => setFormData({...formData, tyLe: Number(e.target.value)})} className="w-full h-2.5 mt-3.5 bg-blue-200 rounded-lg appearance-none cursor-pointer accent-blue-600" /></div><div className="sm:col-span-2"><label className="block text-xs md:text-sm font-bold text-gray-900 mb-1.5">Nhật ký báo cáo</label><textarea rows="3" value={formData.baoCao} onChange={e => setFormData({...formData, baoCao: e.target.value})} className="w-full px-4 py-3 border border-blue-300 rounded-xl outline-none bg-white text-sm"></textarea></div></div></div><div className="mt-6 flex justify-end space-x-3 pt-4 border-t border-gray-100"><button type="button" onClick={() => setIsFormOpen(false)} className="px-5 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-100 text-sm font-medium">Hủy bỏ</button><button type="submit" className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 text-sm">{editingTask ? 'Lưu cập nhật' : 'Tạo mới'}</button></div></form></div></div>
       )}
 
-      {isUserModalOpen && isAdmin && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center z-50 md:p-4" onClick={() => setIsUserModalOpen(false)}><div className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full max-w-sm transform transition-transform" onClick={e => e.stopPropagation()}><div className="p-5 md:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-2xl"><h3 className="text-lg font-bold text-gray-800">{editingUser ? 'Sửa tài khoản' : 'Thêm tài khoản'}</h3><button onClick={() => setIsUserModalOpen(false)} className="bg-white p-1.5 rounded-full text-gray-500 hover:bg-gray-200 transition-colors shadow-sm">&times;</button></div><form onSubmit={handleSaveUser} className="p-5 md:p-6 space-y-4"><div><label className="block text-xs font-bold text-gray-700 mb-1.5">Họ và Tên</label><input type="text" required value={userFormData.fullName} onChange={e => setUserFormData({...userFormData, fullName: e.target.value})} className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm shadow-sm" placeholder="Nguyễn Văn A" /></div><div><label className="block text-xs font-bold text-gray-700 mb-1.5">Tên đăng nhập</label><input type="text" required value={userFormData.username} disabled={editingUser !== null} onChange={e => setUserFormData({...userFormData, username: e.target.value.replace(/\s/g, '')})} className={`w-full px-4 py-2.5 border border-gray-300 rounded-xl outline-none text-sm shadow-sm ${editingUser ? 'bg-gray-100 text-gray-500' : 'focus:ring-2 focus:ring-blue-500'}`} placeholder="Viết liền" /></div><div><label className="block text-xs font-bold text-gray-700 mb-1.5">Mật khẩu</label><input type="text" required value={userFormData.password} onChange={e => setUserFormData({...userFormData, password: e.target.value})} className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm shadow-sm" /></div><div><label className="block text-xs font-bold text-gray-700 mb-1.5">Quyền hạn</label><select value={userFormData.role} onChange={e => { const newRole = e.target.value; setUserFormData({...userFormData, role: newRole, nhom: newRole === 'Admin' ? 'Tất cả' : userFormData.nhom}); }} className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold text-sm shadow-sm"><option value="Thành viên">Thành viên</option><option value="Trưởng nhóm">Trưởng nhóm</option><option value="Admin">Admin</option></select></div>{userFormData.role !== 'Admin' && (<div><label className="block text-xs font-bold text-indigo-700 mb-1.5">Thuộc Nhóm</label><select value={userFormData.nhom} onChange={e => setUserFormData({...userFormData, nhom: e.target.value})} className="w-full px-4 py-2.5 border border-indigo-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-indigo-700 text-sm shadow-sm bg-indigo-50">{groupsList.map(g => <option key={g} value={g}>{g}</option>)}</select></div>)}<div className="mt-6 flex justify-end space-x-3 pt-4 border-t border-gray-100 pb-4 md:pb-0"><button type="button" onClick={() => setIsUserModalOpen(false)} className="px-5 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium text-sm">Hủy</button><button type="submit" className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors shadow-md font-bold text-sm">Lưu</button></div></form></div></div>
+      {/* FORM QUẢN LÝ QUYỀN */}
+      {isRoleModalOpen && currentUser.role === 'Admin' && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setIsRoleModalOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50 sticky top-0 z-10"><h3 className="text-lg font-bold text-gray-800">{editingRole ? 'Chỉnh sửa Cấu hình Quyền' : 'Tạo Quyền mới'}</h3><button onClick={() => setIsRoleModalOpen(false)} className="bg-white p-1.5 rounded-full text-gray-500 hover:bg-gray-200">&times;</button></div>
+            <form onSubmit={handleSaveRole} className="p-6 space-y-6">
+              <div><label className="block text-sm font-bold text-gray-700 mb-2">Tên quyền <span className="text-red-500">*</span></label><input type="text" required value={roleFormData.name} disabled={['Admin', 'Trưởng nhóm', 'Thành viên'].includes(editingRole?.name)} onChange={e => setRoleFormData({...roleFormData, name: e.target.value})} className="w-full px-4 py-2.5 border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100 disabled:text-gray-500 font-bold" placeholder="VD: Giám đốc, Kế toán trưởng..." /></div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                  <h4 className="font-bold text-slate-800 flex items-center border-b border-slate-200 pb-2"><Settings className="w-4 h-4 mr-2"/> Quyền thao tác Dữ liệu</h4>
+                  <label className="flex items-center space-x-3 cursor-pointer"><input type="checkbox" checked={roleFormData.permissions.canCreate} onChange={e => setRoleFormData({ ...roleFormData, permissions: { ...roleFormData.permissions, canCreate: e.target.checked }})} className="w-4 h-4 text-indigo-600 rounded" /><span className="text-sm font-medium text-gray-700">Tạo công việc mới</span></label>
+                  <label className="flex items-center space-x-3 cursor-pointer"><input type="checkbox" checked={roleFormData.permissions.canEditFull} onChange={e => setRoleFormData({ ...roleFormData, permissions: { ...roleFormData.permissions, canEditFull: e.target.checked }})} className="w-4 h-4 text-indigo-600 rounded" /><div className="flex flex-col"><span className="text-sm font-medium text-gray-700">Sửa toàn bộ thông tin công việc</span><span className="text-[10px] text-gray-500">Nếu TẮT, chỉ có thể cập nhật Tiến độ/Báo cáo</span></div></label>
+                  <label className="flex items-center space-x-3 cursor-pointer"><input type="checkbox" checked={roleFormData.permissions.canDelete} onChange={e => setRoleFormData({ ...roleFormData, permissions: { ...roleFormData.permissions, canDelete: e.target.checked }})} className="w-4 h-4 text-red-500 rounded" /><span className="text-sm font-medium text-gray-700">Xóa công việc</span></label>
+                </div>
+
+                <div className="space-y-3 p-4 bg-indigo-50 rounded-xl border border-indigo-200">
+                  <h4 className="font-bold text-indigo-800 flex items-center border-b border-indigo-200 pb-2"><Search className="w-4 h-4 mr-2"/> Phạm vi xem Dữ liệu</h4>
+                  <label className="flex items-center space-x-3 cursor-pointer"><input type="checkbox" checked={roleFormData.permissions.canViewAllGroups} onChange={e => setRoleFormData({ ...roleFormData, permissions: { ...roleFormData.permissions, canViewAllGroups: e.target.checked }})} className="w-4 h-4 text-indigo-600 rounded" /><div className="flex flex-col"><span className="text-sm font-medium text-gray-700">Xem công việc của TẤT CẢ các Nhóm</span><span className="text-[10px] text-gray-500">Nếu TẮT, chỉ xem được việc của Nhóm mình</span></div></label>
+                  <div className="pt-2">
+                    <label className="block text-xs font-bold text-indigo-700 mb-1">Mục hiển thị trên màn hình:</label>
+                    <div className="flex flex-wrap gap-2">
+                      {['personal', 'group', 'all', 'kpi'].map(mode => (
+                        <label key={mode} className={`px-2 py-1 border rounded-md text-xs cursor-pointer font-medium transition-colors ${roleFormData.permissions.viewModes.includes(mode) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-300'}`}><input type="checkbox" className="hidden" checked={roleFormData.permissions.viewModes.includes(mode)} onChange={e => { const newModes = e.target.checked ? [...roleFormData.permissions.viewModes, mode] : roleFormData.permissions.viewModes.filter(m => m !== mode); setRoleFormData({...roleFormData, permissions: {...roleFormData.permissions, viewModes: newModes}}); }}/>{mode === 'personal' ? 'Việc Của tôi' : mode === 'group' ? 'Việc Của Nhóm' : mode === 'all' ? 'Tất cả' : 'Báo cáo KPI'}</label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
+                <h4 className="font-bold text-blue-800 flex items-center mb-3"><ListTodo className="w-4 h-4 mr-2"/> Giới hạn Danh mục Công việc</h4>
+                <p className="text-xs text-gray-500 mb-3">Chọn các danh mục mà Quyền này được phép xem. <b>Để trống nếu muốn cho phép xem TẤT CẢ danh mục.</b></p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {Object.keys(CATEGORY_COLORS).map(cat => (
+                    <label key={cat} className="flex items-center space-x-2 text-xs font-medium text-gray-700 bg-white p-2 rounded border border-gray-200 cursor-pointer hover:bg-gray-50">
+                      <input type="checkbox" checked={roleFormData.permissions.allowedCategories?.includes(cat) || false} onChange={e => {
+                        const cats = roleFormData.permissions.allowedCategories || [];
+                        const newCats = e.target.checked ? [...cats, cat] : cats.filter(c => c !== cat);
+                        setRoleFormData({...roleFormData, permissions: {...roleFormData.permissions, allowedCategories: newCats}});
+                      }} className="w-3.5 h-3.5 text-blue-600 rounded" />
+                      <span className="truncate" title={cat}>{cat}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end space-x-3 pt-4 border-t border-gray-100"><button type="button" onClick={() => setIsRoleModalOpen(false)} className="px-5 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium text-sm">Hủy</button><button type="submit" className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors shadow-md font-bold text-sm">Lưu cấu hình</button></div>
+            </form>
+          </div>
+        </div>
       )}
 
-      {isGroupModalOpen && isAdmin && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center z-50 md:p-4" onClick={() => setIsGroupModalOpen(false)}><div className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}><div className="p-5 md:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-2xl"><h3 className="text-lg font-bold text-gray-800">{editingGroup ? 'Sửa nhóm' : 'Thêm nhóm'}</h3><button onClick={() => setIsGroupModalOpen(false)} className="bg-white p-1.5 rounded-full text-gray-500 hover:bg-gray-200 transition-colors shadow-sm">&times;</button></div><form onSubmit={handleSaveGroup} className="p-5 md:p-6 space-y-4"><div><label className="block text-xs font-bold text-gray-700 mb-1.5">Tên Nhóm / Phòng ban <span className="text-red-500">*</span></label><input type="text" required value={groupFormName} onChange={e => setGroupFormName(e.target.value)} className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm shadow-sm" /></div><div className="mt-6 flex justify-end space-x-3 pt-4 border-t border-gray-100 pb-4 md:pb-0"><button type="button" onClick={() => setIsGroupModalOpen(false)} className="px-5 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium text-sm">Hủy</button><button type="submit" className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors shadow-md font-bold text-sm">Lưu</button></div></form></div></div>
+      {/* FORM USER CẬP NHẬT CHỌN QUYỀN TỪ DANH SÁCH */}
+      {isUserModalOpen && currentUser.role === 'Admin' && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center z-50 md:p-4" onClick={() => setIsUserModalOpen(false)}><div className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full max-w-sm transform transition-transform" onClick={e => e.stopPropagation()}><div className="p-5 md:p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-2xl"><h3 className="text-lg font-bold text-gray-800">{editingUser ? 'Sửa tài khoản' : 'Thêm tài khoản'}</h3><button onClick={() => setIsUserModalOpen(false)} className="bg-white p-1.5 rounded-full text-gray-500 hover:bg-gray-200 transition-colors shadow-sm">&times;</button></div><form onSubmit={handleSaveUser} className="p-5 md:p-6 space-y-4"><div><label className="block text-xs font-bold text-gray-700 mb-1.5">Họ và Tên</label><input type="text" required value={userFormData.fullName} onChange={e => setUserFormData({...userFormData, fullName: e.target.value})} className="w-full px-4 py-2.5 border border-gray-300 rounded-xl outline-none text-sm" /></div><div><label className="block text-xs font-bold text-gray-700 mb-1.5">Tên đăng nhập</label><input type="text" required value={userFormData.username} disabled={editingUser !== null} onChange={e => setUserFormData({...userFormData, username: e.target.value.replace(/\s/g, '')})} className="w-full px-4 py-2.5 border border-gray-300 rounded-xl outline-none text-sm" /></div><div><label className="block text-xs font-bold text-gray-700 mb-1.5">Mật khẩu</label><input type="text" required value={userFormData.password} onChange={e => setUserFormData({...userFormData, password: e.target.value})} className="w-full px-4 py-2.5 border border-gray-300 rounded-xl outline-none text-sm" /></div><div><label className="block text-xs font-bold text-gray-700 mb-1.5">Quyền hạn (Vai trò)</label><select value={userFormData.role} onChange={e => { const newRole = e.target.value; setUserFormData({...userFormData, role: newRole, nhom: newRole === 'Admin' ? 'Tất cả' : userFormData.nhom}); }} className="w-full px-4 py-2.5 border border-gray-300 rounded-xl outline-none font-bold text-sm bg-indigo-50 text-indigo-700">{rolesList.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}</select></div>{userFormData.role !== 'Admin' && (<div><label className="block text-xs font-bold text-gray-700 mb-1.5">Thuộc Nhóm</label><select value={userFormData.nhom} onChange={e => setUserFormData({...userFormData, nhom: e.target.value})} className="w-full px-4 py-2.5 border border-gray-300 rounded-xl outline-none text-sm">{groupsList.map(g => <option key={g} value={g}>{g}</option>)}</select></div>)}<div className="mt-6 flex justify-end space-x-3 pt-4 border-t border-gray-100 pb-4 md:pb-0"><button type="button" onClick={() => setIsUserModalOpen(false)} className="px-5 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors font-medium text-sm">Hủy</button><button type="submit" className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-bold text-sm">Lưu</button></div></form></div></div>
+      )}
+
+      {/* VIEW TASK MODAL */}
+      {viewingTask && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end md:items-center justify-center z-50 md:p-4 transition-opacity" onClick={() => setViewingTask(null)}><div className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto transform transition-transform md:translate-y-0 translate-y-0" onClick={e => e.stopPropagation()}><div className="p-5 md:p-6 border-b border-gray-100 flex justify-between items-start sticky top-0 bg-white z-10"><div className="pr-4"><div className="flex flex-wrap gap-2 mb-2"><span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] md:text-xs font-bold border whitespace-nowrap shadow-sm ${CATEGORY_COLORS[viewingTask.phanLoai] || 'bg-gray-50 text-gray-700 border-gray-200'}`}>{viewingTask.phanLoai}</span><span className="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] md:text-xs font-bold border border-indigo-200 bg-indigo-50 text-indigo-700 whitespace-nowrap shadow-sm">{viewingTask.nhom}</span></div><h3 className="text-lg md:text-xl font-bold text-gray-800 leading-tight">{viewingTask.noiDung}</h3></div><button onClick={() => setViewingTask(null)} className="bg-gray-100 p-1.5 rounded-full text-gray-500 hover:bg-gray-200 transition-colors">&times;</button></div><div className="p-5 md:p-6 space-y-6"><div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6"><div><p className="text-xs md:text-sm text-gray-500 mb-1 font-medium">Phụ trách</p><div className="font-bold text-gray-800">{viewingTask.nguoiPhuTrach || '---'}</div></div><div><p className="text-xs md:text-sm text-gray-500 mb-1 font-medium">Thời hạn</p><div className="flex items-center font-bold text-gray-800 text-sm md:text-base"><Calendar className="w-4 h-4 mr-2 text-blue-500" />{viewingTask.thoiHan || '---'}</div></div><div><p className="text-xs md:text-sm text-gray-500 mb-1 font-medium">Trạng thái</p><div className="flex items-center space-x-3"><span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs md:text-sm font-bold shadow-sm" style={{ backgroundColor: `${STATUS_COLORS[viewingTask.tienDo]}15`, color: STATUS_COLORS[viewingTask.tienDo], border: `1px solid ${STATUS_COLORS[viewingTask.tienDo]}40` }}>{getStatusIcon(viewingTask.tienDo)}{viewingTask.tienDo}</span><span className="font-black text-gray-700 text-lg">{viewingTask.tyLe}%</span></div></div></div><div className="pt-4 border-t border-gray-100"><p className="text-xs md:text-sm text-gray-500 mb-2 font-medium">Chi tiết</p><div className="bg-gray-50 p-4 rounded-xl text-gray-700 whitespace-pre-wrap text-sm border border-gray-100 leading-relaxed">{viewingTask.chiTiet || 'Chưa có mô tả.'}</div></div><div className="pt-2"><p className="text-xs md:text-sm text-gray-500 mb-2 font-medium">Báo cáo</p><div className="bg-blue-50 p-4 rounded-xl text-gray-800 whitespace-pre-wrap text-sm border border-blue-100 leading-relaxed font-medium">{viewingTask.baoCao || 'Chưa có cập nhật.'}</div></div></div><div className="p-4 md:p-5 border-t border-gray-100 bg-gray-50 rounded-b-none md:rounded-b-2xl flex flex-wrap gap-2 justify-end pb-8 md:pb-5"><button onClick={() => { handleOpenForm(viewingTask); setViewingTask(null); }} className="px-4 py-2 bg-white border border-blue-300 text-blue-600 rounded-xl hover:bg-blue-50 transition-colors flex items-center font-bold text-sm"><Edit className="w-4 h-4 mr-2" /> Sửa / Cập nhật</button>{hasPerm('canDelete') && <button onClick={() => handleDeleteTask(viewingTask.id)} className="px-4 py-2 bg-white border border-red-300 text-red-600 rounded-xl hover:bg-red-50 transition-colors flex items-center font-bold text-sm"><Trash2 className="w-4 h-4 mr-2" /> Xóa</button>}<button onClick={() => setViewingTask(null)} className="px-4 py-2 bg-gray-800 text-white rounded-xl hover:bg-gray-900 transition-colors font-bold text-sm">Đóng</button></div></div></div>
       )}
 
       {dialog.isOpen && (
