@@ -377,8 +377,8 @@ export default function App() {
           setTasks(fetchedTasks);
         }
         if (result.users) {
-          const fetchedUsers = result.users.filter(row => row['Tên đăng nhập']).map(row => ({ 
-              id: row['ID']?.toString() || Date.now().toString(), 
+          const fetchedUsers = result.users.filter(row => row['Tên đăng nhập']).map((row, index) => ({ 
+              id: row['ID']?.toString() || `u_${Date.now()}_${index}`,
               fullName: String(row['Họ và tên'] || '').trim(), 
               username: String(row['Tên đăng nhập'] || '').trim(), 
               password: String(row['Mật khẩu'] || '').trim(), 
@@ -386,7 +386,13 @@ export default function App() {
               nhom: String(row['Nhóm'] || 'Khác').trim() 
           }));
           setUsersList(fetchedUsers);
-          if (currentUser && currentUser.id !== 'admin_core') { const updatedCurrent = fetchedUsers.find(u => u.id === currentUser.id); if (updatedCurrent) setCurrentUser(updatedCurrent); }
+          
+          // FIX LỖI NHẢY TÀI KHOẢN: Sử dụng currentUserRef.current thay cho currentUser 
+          // để vòng lặp 60s luôn lấy đúng tài khoản hiện tại, không bị kẹt ở tài khoản cũ
+          if (currentUserRef.current && currentUserRef.current.id !== 'admin_core') { 
+              const updatedCurrent = fetchedUsers.find(u => u.username.toLowerCase() === currentUserRef.current.username.toLowerCase()); 
+              if (updatedCurrent) setCurrentUser(updatedCurrent); 
+          }
         }
         if (result.groups) {
           const fetchedGroups = result.groups.filter(row => row['Tên nhóm']).map(row => row['Tên nhóm']);
