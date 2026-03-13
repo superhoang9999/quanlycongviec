@@ -201,10 +201,29 @@ export default function App() {
   const handleLogin = (e) => {
     e.preventDefault();
     if (isSyncing && usersList.length === 0) return;
-    const inputUsername = loginForm.username.toLowerCase();
-    if (inputUsername === SUPER_ADMIN.username.toLowerCase() && loginForm.password === SUPER_ADMIN.password) { setCurrentUser(SUPER_ADMIN); setLoginError(''); return; }
-    const user = usersList.find(u => u.username.toLowerCase() === inputUsername && u.password === loginForm.password);
-    if (user) { setCurrentUser(user); setLoginError(''); } else { setLoginError('Tài khoản hoặc mật khẩu không chính xác!'); }
+    
+    // Tự động xóa khoảng trắng thừa ở đầu/cuối
+    const inputUsername = loginForm.username.trim().toLowerCase();
+    const inputPassword = loginForm.password.trim();
+
+    if (inputUsername === SUPER_ADMIN.username.toLowerCase() && inputPassword === SUPER_ADMIN.password) { 
+        setCurrentUser(SUPER_ADMIN); 
+        setLoginError(''); 
+        return; 
+    }
+    
+    // Ép kiểu về String (Chuỗi) để khắc phục triệt để lỗi Google Sheets tự nhận diện là Số
+    const user = usersList.find(u => 
+        String(u.username).trim().toLowerCase() === inputUsername && 
+        String(u.password).trim() === inputPassword
+    );
+    
+    if (user) { 
+        setCurrentUser(user); 
+        setLoginError(''); 
+    } else { 
+        setLoginError('Tài khoản hoặc mật khẩu không chính xác!'); 
+    }
   };
 
   const handleLogout = () => { customConfirm("Bạn có chắc chắn muốn đăng xuất?", () => { setCurrentUser(null); setLoginForm({ username: '', password: '' }); setActiveTab('dashboard'); setIsMobileMenuOpen(false); }); };
@@ -350,7 +369,15 @@ export default function App() {
           setTasks(fetchedTasks);
         }
         if (result.users) {
-          const fetchedUsers = result.users.filter(row => row['Tên đăng nhập']).map(row => ({ id: row['ID']?.toString() || Date.now().toString(), fullName: row['Họ và tên'], username: row['Tên đăng nhập'], password: row['Mật khẩu'], role: row['Quyền hạn'] || 'Thành viên', nhom: row['Nhóm'] || 'Khác' }));
+          // Ép toàn bộ dữ liệu User thành dạng Chữ và cắt khoảng trắng rác khi vừa lấy từ Server về
+          const fetchedUsers = result.users.filter(row => row['Tên đăng nhập']).map(row => ({ 
+              id: row['ID']?.toString() || Date.now().toString(), 
+              fullName: String(row['Họ và tên'] || '').trim(), 
+              username: String(row['Tên đăng nhập'] || '').trim(), 
+              password: String(row['Mật khẩu'] || '').trim(), 
+              role: String(row['Quyền hạn'] || 'Thành viên').trim(), 
+              nhom: String(row['Nhóm'] || 'Khác').trim() 
+          }));
           setUsersList(fetchedUsers);
           if (currentUser && currentUser.id !== 'admin_core') { const updatedCurrent = fetchedUsers.find(u => u.id === currentUser.id); if (updatedCurrent) setCurrentUser(updatedCurrent); }
         }
