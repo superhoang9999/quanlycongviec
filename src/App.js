@@ -3,7 +3,7 @@ import {
   LayoutDashboard, ListTodo, Settings, Plus, Edit, Trash2, Search, Calendar, 
   BarChart2, PieChart as PieChartIcon, RefreshCw, Save, CheckCircle, Clock, 
   AlertCircle, Users, Circle, LogOut, Lock, User, Shield, Key, Briefcase, 
-  Menu, Bell, ShieldCheck, ToggleLeft
+  Menu, Bell, ShieldCheck, ToggleLeft, BellRing, CheckCheck, MessageSquare
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
@@ -54,7 +54,11 @@ export default function App() {
   const [groupsList, setGroupsList] = useState(() => JSON.parse(localStorage.getItem('qlt_groups')) || INITIAL_GROUPS);
   const [tasks, setTasks] = useState(() => JSON.parse(localStorage.getItem('qlt_tasks')) || INITIAL_TASKS);
   
-  // Khởi tạo luôn có sẵn quyền Admin cứng
+  // States cho Hệ thống Thông báo (Notifications)
+  const [notifications, setNotifications] = useState([]);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const notifRef = useRef(null);
+  
   const [rolesList, setRolesList] = useState(() => {
     const cached = JSON.parse(localStorage.getItem('qlt_roles'));
     if (cached && cached.length > 0) return [HARDCODED_ADMIN_ROLE, ...cached.filter(r => r.name !== 'Admin')];
@@ -64,21 +68,39 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(() => !localStorage.getItem('qlt_users'));
 
   useEffect(() => { 
-    if (currentUser) sessionStorage.setItem('qlt_currentUser', JSON.stringify(currentUser));
+    if (currentUser) {
+       sessionStorage.setItem('qlt_currentUser', JSON.stringify(currentUser));
+       // Tải thông báo riêng của từng người từ LocalStorage
+       const savedNotifs = localStorage.getItem(`qlt_notif_${currentUser.username}`);
+       if (savedNotifs) setNotifications(JSON.parse(savedNotifs));
+    }
     else sessionStorage.removeItem('qlt_currentUser');
   }, [currentUser]);
+  
   useEffect(() => { localStorage.setItem('qlt_users', JSON.stringify(usersList)); }, [usersList]);
   useEffect(() => { localStorage.setItem('qlt_groups', JSON.stringify(groupsList)); }, [groupsList]);
   useEffect(() => { localStorage.setItem('qlt_tasks', JSON.stringify(tasks)); }, [tasks]);
   useEffect(() => { localStorage.setItem('qlt_roles', JSON.stringify(rolesList)); }, [rolesList]);
+  
+  // Lưu thông báo khi có thay đổi
+  useEffect(() => {
+     if (currentUser && notifications.length > 0) {
+        localStorage.setItem(`qlt_notif_${currentUser.username}`, JSON.stringify(notifications));
+     }
+  }, [notifications, currentUser]);
 
-  // --- HỆ THỐNG PHÂN QUYỀN ĐỘNG ---
+  // Click ra ngoài để đóng popup thông báo
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (notifRef.current && !notifRef.current.contains(event.target)) setIsNotifOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const currentRoleConfig = useMemo(() => {
     if (!currentUser) return null;
-    // Nếu là Admin, luôn luôn trả về bộ quyền gắn cứng
-    if (currentUser.id === 'admin_core' || currentUser.role === 'Admin') {
-       return HARDCODED_ADMIN_ROLE;
-    }
+    if (currentUser.id === 'admin_core' || currentUser.role === 'Admin') return HARDCODED_ADMIN_ROLE;
     const role = rolesList.find(r => r.name === currentUser.role);
     return role || { permissions: { canViewAllGroups: false, canCreate: false, canEditFull: false, canDelete: false, viewModes: ['personal'], allowedCategories: [] } };
   }, [currentUser, rolesList]);
@@ -94,13 +116,11 @@ export default function App() {
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
-  // States Modal Công việc
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [viewingTask, setViewingTask] = useState(null);
   const [formData, setFormData] = useState({ phanLoai: 'Thường xuyên', noiDung: '', chiTiet: '', phoiHop: '', nhom: 'Nhóm IT', thoiHan: '', tienDo: 'Chưa bắt đầu', tyLe: 0, nguoiPhuTrach: '', baoCao: '' });
   
-  // States Modal User & Group
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [userFormData, setUserFormData] = useState({ username: '', password: '', role: 'Thành viên', fullName: '', nhom: 'Khác' });
@@ -108,7 +128,6 @@ export default function App() {
   const [editingGroup, setEditingGroup] = useState(null);
   const [groupFormName, setGroupFormName] = useState('');
 
-  // States Modal Roles
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [editingRole, setEditingRole] = useState(null);
   const [roleFormData, setRoleFormData] = useState({ name: '', permissions: { canViewAllGroups: false, canCreate: false, canEditFull: false, canDelete: false, viewModes: ['personal'], allowedCategories: [] }});
@@ -121,7 +140,10 @@ export default function App() {
   const prevTaskIdsRef = useRef(new Set());
   const lastKpiNotifDateRef = useRef('');
   const currentUserRef = useRef(currentUser);
+  const tasksRef = useRef(tasks); // Dùng ref để so sánh dữ liệu cũ/mới sinh thông báo
+  
   useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
+  useEffect(() => { tasksRef.current = tasks; }, [tasks]);
 
   const [dialog, setDialog] = useState({ isOpen: false, type: 'alert', message: '', onConfirm: null });
   const customAlert = (message) => setDialog({ isOpen: true, type: 'alert', message, onConfirm: null });
@@ -129,7 +151,6 @@ export default function App() {
   const closeDialog = () => setDialog({ ...dialog, isOpen: false });
 
   useEffect(() => {
-    // PWA Meta setup
     const addMetaTag = (name, content) => { let meta = document.querySelector(`meta[name="${name}"]`); if (!meta) { meta = document.createElement('meta'); meta.name = name; document.head.appendChild(meta); } meta.content = content; };
     addMetaTag("viewport", "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"); addMetaTag("theme-color", "#2563eb"); addMetaTag("apple-mobile-web-app-capable", "yes"); addMetaTag("apple-mobile-web-app-status-bar-style", "black-translucent"); addMetaTag("apple-mobile-web-app-title", "QL Công Việc");
     const updateIcon = (rel, size) => { let link = document.querySelector(`link[rel='${rel}']`); if (!link) { link = document.createElement('link'); link.rel = rel; if (size) link.sizes = size; document.head.appendChild(link); } link.href = APP_ICON_URL; };
@@ -144,7 +165,6 @@ export default function App() {
     return () => { clearInterval(interval); document.removeEventListener("visibilitychange", handleVisibilityChange); };
   }, [sheetUrl]);
 
-  // Cập nhật lại viewMode khi tab thay đổi hoặc khi load để đảm bảo user không kẹt ở view họ không có quyền
   useEffect(() => {
     if (currentRoleConfig) {
       if (isKpiMode && !hasViewMode('kpi')) setIsKpiMode(false);
@@ -157,11 +177,8 @@ export default function App() {
     if (!currentUser || !currentRoleConfig) return [];
     let scopeTasks = hasPerm('canViewAllGroups') || viewMode === 'all' ? tasks : tasks.filter(t => t.nhom === currentUser.nhom);
     
-    // Lọc theo Categories được phép
     const allowedCats = currentRoleConfig.permissions.allowedCategories;
-    if (allowedCats && allowedCats.length > 0) {
-      scopeTasks = scopeTasks.filter(t => allowedCats.includes(t.phanLoai));
-    }
+    if (allowedCats && allowedCats.length > 0) scopeTasks = scopeTasks.filter(t => allowedCats.includes(t.phanLoai));
 
     if (viewMode === 'personal') {
       scopeTasks = scopeTasks.filter(t => {
@@ -193,7 +210,6 @@ export default function App() {
   const handleLogout = () => { customConfirm("Bạn có chắc chắn muốn đăng xuất?", () => { setCurrentUser(null); setLoginForm({ username: '', password: '' }); setActiveTab('dashboard'); setIsMobileMenuOpen(false); }); };
   const changeTab = (tab) => { setActiveTab(tab); setIsMobileMenuOpen(false); };
 
-  // --- STATS LOGIC (Tính trên visibleTasks) ---
   const stats = useMemo(() => {
     let total = visibleTasks.length, completed = 0, inProgress = 0, overdue = 0, notStarted = 0, totalRate = 0;
     visibleTasks.forEach(t => {
@@ -249,7 +265,6 @@ export default function App() {
     });
   }, [visibleTasks, searchTerm, filterMonth, filterYear]);
 
-  // --- CRUD TASKS ---
   const handleOpenForm = (task = null) => {
     if (task) { setEditingTask(task); setFormData({ ...task }); } 
     else {
@@ -277,113 +292,23 @@ export default function App() {
       setTasks(prev => prev.filter(t => t.id !== id)); setViewingTask(null);
       if (sheetUrl) {
         try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'delete', sheetName: 'Data', id: id }) }); } 
-        catch (error) { console.error("Lỗi xóa task:", error); }
+        catch (error) {}
       }
     });
   };
 
-  // --- CRUD USERS ---
-  const handleOpenUserForm = (user = null) => {
-    if (user) { setEditingUser(user); setUserFormData({ ...user }); } 
-    else { setEditingUser(null); setUserFormData({ username: '', password: '', role: rolesList[2]?.name || 'Thành viên', fullName: '', nhom: groupsList[0] || 'Khác' }); }
-    setIsUserModalOpen(true);
-  };
-
-  const handleSaveUser = async (e) => {
-    e.preventDefault();
-    const userToSave = { ...userFormData };
-    if (userToSave.role === 'Admin') userToSave.nhom = 'Tất cả';
-    const newUser = editingUser ? { ...userToSave, id: editingUser.id } : { ...userToSave, id: 'u' + Date.now() };
-    if (editingUser) {
-      const isDuplicate = usersList.some(u => u.id !== newUser.id && u.username.toLowerCase() === newUser.username.toLowerCase());
-      if (isDuplicate || newUser.username.toLowerCase() === SUPER_ADMIN.username.toLowerCase()) { customAlert("Tên tài khoản đã tồn tại!"); return; }
-      setUsersList(usersList.map(u => u.id === editingUser.id ? newUser : u));
-    } else {
-      const newUsernameLower = newUser.username.toLowerCase();
-      if (newUsernameLower === SUPER_ADMIN.username.toLowerCase() || usersList.some(u => u.username.toLowerCase() === newUsernameLower)) { customAlert("Tên tài khoản đã tồn tại!"); return; }
-      setUsersList([...usersList, newUser]);
-    }
-    setIsUserModalOpen(false);
-    if (sheetUrl) {
-      try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: editingUser ? 'update' : 'add', sheetName: 'Users', ...newUser }) }); } 
-      catch (error) {}
-    }
-  };
-
-  const handleDeleteUser = async (id) => {
-    if (id === currentUser.id) { customAlert("Không thể xóa tài khoản đang đăng nhập!"); return; }
-    customConfirm('Bạn có chắc chắn muốn xóa tài khoản này?', async () => {
-      setUsersList(prevList => prevList.filter(u => u.id !== id)); 
-      if (sheetUrl) { try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'delete', sheetName: 'Users', id: id }) }); } catch (error) {} }
-    });
-  };
-
-  // --- CRUD GROUPS ---
+  // --- Các hàm User, Group, Role giữ nguyên ---
+  const handleOpenUserForm = (user = null) => { if (user) { setEditingUser(user); setUserFormData({ ...user }); } else { setEditingUser(null); setUserFormData({ username: '', password: '', role: rolesList[2]?.name || 'Thành viên', fullName: '', nhom: groupsList[0] || 'Khác' }); } setIsUserModalOpen(true); };
+  const handleSaveUser = async (e) => { e.preventDefault(); const userToSave = { ...userFormData }; if (userToSave.role === 'Admin') userToSave.nhom = 'Tất cả'; const newUser = editingUser ? { ...userToSave, id: editingUser.id } : { ...userToSave, id: 'u' + Date.now() }; if (editingUser) { const isDuplicate = usersList.some(u => u.id !== newUser.id && u.username.toLowerCase() === newUser.username.toLowerCase()); if (isDuplicate || newUser.username.toLowerCase() === SUPER_ADMIN.username.toLowerCase()) { customAlert("Tên tài khoản đã tồn tại!"); return; } setUsersList(usersList.map(u => u.id === editingUser.id ? newUser : u)); } else { const newUsernameLower = newUser.username.toLowerCase(); if (newUsernameLower === SUPER_ADMIN.username.toLowerCase() || usersList.some(u => u.username.toLowerCase() === newUsernameLower)) { customAlert("Tên tài khoản đã tồn tại!"); return; } setUsersList([...usersList, newUser]); } setIsUserModalOpen(false); if (sheetUrl) { try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: editingUser ? 'update' : 'add', sheetName: 'Users', ...newUser }) }); } catch (error) {} } };
+  const handleDeleteUser = async (id) => { if (id === currentUser.id) { customAlert("Không thể xóa tài khoản đang đăng nhập!"); return; } customConfirm('Bạn có chắc chắn muốn xóa tài khoản này?', async () => { setUsersList(prevList => prevList.filter(u => u.id !== id)); if (sheetUrl) { try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'delete', sheetName: 'Users', id: id }) }); } catch (error) {} } }); };
   const handleOpenGroupForm = (groupName = null) => { setEditingGroup(groupName); setGroupFormName(groupName || ''); setIsGroupModalOpen(true); };
-  const handleSaveGroup = async (e) => {
-    e.preventDefault(); const newName = groupFormName.trim(); if (!newName) return;
-    if (editingGroup) {
-      if (editingGroup === newName) { setIsGroupModalOpen(false); return; }
-      if (groupsList.includes(newName)) { customAlert('Tên nhóm đã tồn tại!'); return; }
-      setGroupsList(groupsList.map(g => g === editingGroup ? newName : g)); setTasks(tasks.map(t => t.nhom === editingGroup ? { ...t, nhom: newName } : t)); setUsersList(usersList.map(u => u.nhom === editingGroup ? { ...u, nhom: newName } : u));
-      if (currentUser?.nhom === editingGroup) setCurrentUser({...currentUser, nhom: newName});
-      if (sheetUrl) { try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'updateGroup', oldName: editingGroup, newName: newName }) }); } catch (error) {} }
-    } else {
-      if (groupsList.includes(newName)) { customAlert('Tên nhóm đã tồn tại!'); return; }
-      setGroupsList([...groupsList, newName]);
-      if (sheetUrl) { try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'add', sheetName: 'Group', name: newName }) }); } catch (error) {} }
-    }
-    setIsGroupModalOpen(false);
-  };
-  const handleDeleteGroup = async (groupName) => {
-    if (groupName === 'Khác') { customAlert('Không thể xóa nhóm mặc định này!'); return; }
-    customConfirm(`Bạn có chắc muốn xóa nhóm "${groupName}"?`, async () => {
-      setGroupsList(prevList => prevList.filter(g => g !== groupName)); setTasks(prevTasks => prevTasks.map(t => t.nhom === groupName ? { ...t, nhom: 'Khác' } : t)); setUsersList(prevUsers => prevUsers.map(u => u.nhom === groupName ? { ...u, nhom: 'Khác' } : u));
-      if (currentUser?.nhom === groupName) setCurrentUser({...currentUser, nhom: 'Khác'});
-      if (sheetUrl) { try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'deleteGroup', name: groupName }) }); } catch (error) {} }
-    });
-  };
+  const handleSaveGroup = async (e) => { e.preventDefault(); const newName = groupFormName.trim(); if (!newName) return; if (editingGroup) { if (editingGroup === newName) { setIsGroupModalOpen(false); return; } if (groupsList.includes(newName)) { customAlert('Tên nhóm đã tồn tại!'); return; } setGroupsList(groupsList.map(g => g === editingGroup ? newName : g)); setTasks(tasks.map(t => t.nhom === editingGroup ? { ...t, nhom: newName } : t)); setUsersList(usersList.map(u => u.nhom === editingGroup ? { ...u, nhom: newName } : u)); if (currentUser?.nhom === editingGroup) setCurrentUser({...currentUser, nhom: newName}); if (sheetUrl) { try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'updateGroup', oldName: editingGroup, newName: newName }) }); } catch (error) {} } } else { if (groupsList.includes(newName)) { customAlert('Tên nhóm đã tồn tại!'); return; } setGroupsList([...groupsList, newName]); if (sheetUrl) { try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'add', sheetName: 'Group', name: newName }) }); } catch (error) {} } } setIsGroupModalOpen(false); };
+  const handleDeleteGroup = async (groupName) => { if (groupName === 'Khác') { customAlert('Không thể xóa nhóm mặc định này!'); return; } customConfirm(`Bạn có chắc muốn xóa nhóm "${groupName}"?`, async () => { setGroupsList(prevList => prevList.filter(g => g !== groupName)); setTasks(prevTasks => prevTasks.map(t => t.nhom === groupName ? { ...t, nhom: 'Khác' } : t)); setUsersList(prevUsers => prevUsers.map(u => u.nhom === groupName ? { ...u, nhom: 'Khác' } : u)); if (currentUser?.nhom === groupName) setCurrentUser({...currentUser, nhom: 'Khác'}); if (sheetUrl) { try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'deleteGroup', name: groupName }) }); } catch (error) {} } }); };
+  const handleOpenRoleForm = (role = null) => { if (role) { setEditingRole(role); setRoleFormData({ ...role }); } else { setEditingRole(null); setRoleFormData({ name: '', permissions: { canViewAllGroups: false, canCreate: false, canEditFull: false, canDelete: false, viewModes: ['personal'], allowedCategories: [] }}); } setIsRoleModalOpen(true); };
+  const handleSaveRole = async (e) => { e.preventDefault(); if (roleFormData.name.trim().toLowerCase() === 'admin') { customAlert("Quyền 'Admin' là quyền hệ thống được gắn cứng, không thể tạo mới hay chỉnh sửa!"); return; } const newRole = editingRole ? { ...roleFormData, id: editingRole.id } : { ...roleFormData, id: 'role_' + Date.now() }; if (editingRole) { if (rolesList.some(r => r.id !== newRole.id && r.name.toLowerCase() === newRole.name.toLowerCase())) { customAlert("Tên quyền đã tồn tại!"); return; } setRolesList(rolesList.map(r => r.id === editingRole.id ? newRole : r)); } else { if (rolesList.some(r => r.name.toLowerCase() === newRole.name.toLowerCase())) { customAlert("Tên quyền đã tồn tại!"); return; } setRolesList([...rolesList, newRole]); } setIsRoleModalOpen(false); if (sheetUrl) { try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: editingRole ? 'updateRole' : 'addRole', ...newRole }) }); } catch (error) {} } };
+  const handleDeleteRole = async (id, roleName) => { if (roleName === 'Admin') { customAlert('Không thể xóa quyền Admin!'); return; } if (usersList.some(u => u.role === roleName)) { customAlert('Đang có người dùng sử dụng quyền này, không thể xóa!'); return; } customConfirm(`Bạn có chắc muốn xóa quyền "${roleName}"?`, async () => { setRolesList(prev => prev.filter(r => r.id !== id)); if (sheetUrl) { try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'deleteRole', id: id }) }); } catch (error) {} } }); };
 
-  // --- CRUD ROLES (Quyền) ---
-  const handleOpenRoleForm = (role = null) => {
-    if (role) { setEditingRole(role); setRoleFormData({ ...role }); } 
-    else { setEditingRole(null); setRoleFormData({ name: '', permissions: { canViewAllGroups: false, canCreate: false, canEditFull: false, canDelete: false, viewModes: ['personal'], allowedCategories: [] }}); }
-    setIsRoleModalOpen(true);
-  };
-
-  const handleSaveRole = async (e) => {
-    e.preventDefault();
-    
-    // Ngăn chặn việc tạo mới hoặc sửa thành quyền có tên là Admin
-    if (roleFormData.name.trim().toLowerCase() === 'admin') {
-      customAlert("Quyền 'Admin' là quyền hệ thống được gắn cứng, không thể tạo mới hay chỉnh sửa!"); 
-      return;
-    }
-
-    const newRole = editingRole ? { ...roleFormData, id: editingRole.id } : { ...roleFormData, id: 'role_' + Date.now() };
-    if (editingRole) {
-      if (rolesList.some(r => r.id !== newRole.id && r.name.toLowerCase() === newRole.name.toLowerCase())) { customAlert("Tên quyền đã tồn tại!"); return; }
-      setRolesList(rolesList.map(r => r.id === editingRole.id ? newRole : r));
-    } else {
-      if (rolesList.some(r => r.name.toLowerCase() === newRole.name.toLowerCase())) { customAlert("Tên quyền đã tồn tại!"); return; }
-      setRolesList([...rolesList, newRole]);
-    }
-    setIsRoleModalOpen(false);
-    if (sheetUrl) {
-      // Gửi lên sheet Roles (cần update Apps Script để hứng action addRole/updateRole)
-      try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: editingRole ? 'updateRole' : 'addRole', ...newRole }) }); } catch (error) {}
-    }
-  };
-
-  const handleDeleteRole = async (id, roleName) => {
-    if (roleName === 'Admin') { customAlert('Không thể xóa quyền Admin!'); return; }
-    if (usersList.some(u => u.role === roleName)) { customAlert('Đang có người dùng sử dụng quyền này, không thể xóa!'); return; }
-    customConfirm(`Bạn có chắc muốn xóa quyền "${roleName}"?`, async () => {
-      setRolesList(prev => prev.filter(r => r.id !== id));
-      if (sheetUrl) { try { await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: 'deleteRole', id: id }) }); } catch (error) {} }
-    });
-  };
-
+  // --- XỬ LÝ LẤY DỮ LIỆU & TẠO THÔNG BÁO ---
   const handleSync = async (isSilent = false) => {
     if (!sheetUrl) return; setIsSyncing(true);
     try {
@@ -395,6 +320,33 @@ export default function App() {
               let parsedThoiHan = ''; if (row['Thời hạn']) { const d = new Date(row['Thời hạn']); parsedThoiHan = !isNaN(d.getTime()) ? d.toISOString().split('T')[0] : String(row['Thời hạn']); }
               return { id: row['ID']?.toString() || Date.now().toString(), phanLoai: row['Phân loại nhiệm vụ'] || 'Thường xuyên', noiDung: row['Nội dung công việc'] || '', chiTiet: row['Chi tiết công việc'] || '', phoiHop: row['Phối hợp'] || '', thoiHan: parsedThoiHan, tienDo: row['Tiến độ'] || 'Chưa bắt đầu', tyLe: Number(row['Tỷ lệ hoàn thành']) || 0, nguoiPhuTrach: row['Người được phân công'] || '', baoCao: row['Báo cáo kết quả'] || '', nhom: row['Nhóm'] || 'Khác' };
             });
+            
+          // THUẬT TOÁN SINH THÔNG BÁO (So sánh fetchedTasks với tasks hiện tại)
+          if (tasksRef.current.length > 0 && currentUserRef.current) {
+              const newNotifs = [];
+              const myName = currentUserRef.current.fullName.toLowerCase();
+              const myUsername = currentUserRef.current.username.toLowerCase();
+              
+              fetchedTasks.forEach(newTask => {
+                  const oldTask = tasksRef.current.find(t => t.id === newTask.id);
+                  const assignees = newTask.nguoiPhuTrach ? newTask.nguoiPhuTrach.split(',').map(s => s.trim().toLowerCase()) : [];
+                  // Chỉ thông báo nếu việc đó giao cho mình, hoặc là việc của nhóm (nếu mình là Quản lý/Trưởng nhóm)
+                  const isRelevant = assignees.includes(myName) || assignees.includes(myUsername) || (newTask.nhom === currentUserRef.current.nhom && currentUserRef.current.role !== 'Thành viên');
+                  
+                  if (isRelevant) {
+                      const nowTime = new Date().toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
+                      if (!oldTask) {
+                          newNotifs.push({ id: Date.now() + Math.random(), taskId: newTask.id, type: 'new', message: `Phân công việc mới: ${newTask.noiDung}`, time: nowTime, read: false });
+                      } else if (oldTask.tienDo !== newTask.tienDo || oldTask.baoCao !== newTask.baoCao || oldTask.tyLe !== newTask.tyLe) {
+                          newNotifs.push({ id: Date.now() + Math.random(), taskId: newTask.id, type: 'update', message: `Cập nhật tiến độ: ${newTask.noiDung}`, time: nowTime, read: false });
+                      }
+                  }
+              });
+              
+              if (newNotifs.length > 0) {
+                  setNotifications(prev => [...newNotifs, ...prev].slice(0, 30)); // Lưu tối đa 30 thông báo gần nhất
+              }
+          }
           setTasks(fetchedTasks);
         }
         if (result.users) {
@@ -407,13 +359,7 @@ export default function App() {
           if (fetchedGroups.length > 0) setGroupsList(Array.from(new Set([...fetchedGroups, 'Khác'])));
         }
         if (result.roles) {
-           // Bỏ qua quyền Admin từ Sheets (nếu ai đó lỡ tạo), chỉ lấy các quyền khác
-           const fetchedRoles = result.roles.filter(row => row['Tên quyền'] && row['Tên quyền'] !== 'Admin').map(row => ({
-             id: row['ID']?.toString(),
-             name: row['Tên quyền'],
-             permissions: JSON.parse(row['Cấu hình'] || '{}')
-           }));
-           // Ghép quyền Admin cứng vào đầu danh sách
+           const fetchedRoles = result.roles.filter(row => row['Tên quyền'] && row['Tên quyền'] !== 'Admin').map(row => ({ id: row['ID']?.toString(), name: row['Tên quyền'], permissions: JSON.parse(row['Cấu hình'] || '{}') }));
            setRolesList([HARDCODED_ADMIN_ROLE, ...fetchedRoles]);
         }
       }
@@ -435,6 +381,22 @@ export default function App() {
     if (permission === "granted") { new Notification("Cài đặt thành công!", { body: "Bạn sẽ nhận được thông báo nhắc nhở vào 15:00 hàng ngày.", icon: APP_ICON_URL }); } else { customAlert("Bạn đã từ chối cấp quyền thông báo."); }
   };
 
+  const handleNotifClick = (notif) => {
+      // Đánh dấu đã đọc
+      setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
+      setIsNotifOpen(false);
+      // Mở công việc đó ra xem
+      const targetTask = tasks.find(t => t.id === notif.taskId);
+      if (targetTask) {
+          changeTab('tasks');
+          setViewingTask(targetTask);
+      } else {
+          customAlert("Công việc này không còn tồn tại hoặc đã bị xóa!");
+      }
+  };
+
+  const unreadCount = notifications.filter(n => !n.read).length;
+
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col justify-center items-center p-4 relative">
@@ -454,6 +416,7 @@ export default function App() {
   return (
     <div className="flex h-screen bg-gray-50 text-gray-800 font-sans overflow-hidden">
       {isMobileMenuOpen && <div className="fixed inset-0 bg-black/50 z-20 md:hidden backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)} />}
+      
       <div className={`fixed inset-y-0 left-0 transform ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 transition duration-300 ease-in-out z-30 w-64 bg-white border-r border-gray-200 flex flex-col shadow-xl md:shadow-sm`}>
         <div className="p-5 border-b border-gray-100">
           <div className="flex items-center space-x-3 mb-4"><img src={APP_ICON_URL} alt="Icon" className="w-8 h-8 object-contain rounded-lg shadow-sm" onError={(e)=>{e.target.onerror = null; e.target.src=FALLBACK_ICON}}/><h1 className="text-lg font-bold text-gray-800 truncate">Quản lý công việc</h1></div>
@@ -478,7 +441,52 @@ export default function App() {
       </div>
 
       <div className="flex-1 flex flex-col h-full overflow-hidden bg-gray-50/50">
-        <div className="md:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shadow-sm z-10 flex-shrink-0"><div className="flex items-center space-x-2"><img src={APP_ICON_URL} alt="Icon" className="w-6 h-6 object-contain" onError={(e)=>{e.target.onerror = null; e.target.src=FALLBACK_ICON}}/><h1 className="text-base font-bold text-gray-800">Quản lý công việc</h1></div><button onClick={() => setIsMobileMenuOpen(true)} className="p-1.5 bg-gray-100 rounded-lg text-gray-600 hover:bg-gray-200 transition-transform"><Menu className="w-6 h-6" /></button></div>
+        
+        {/* HEADER CHỨA QUẢ CHUÔNG (Hiển thị trên mọi thiết bị) */}
+        <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shadow-sm z-10 flex-shrink-0">
+           <div className="flex items-center space-x-2 md:hidden"><img src={APP_ICON_URL} alt="Icon" className="w-6 h-6 object-contain" onError={(e)=>{e.target.onerror = null; e.target.src=FALLBACK_ICON}}/><h1 className="text-base font-bold text-gray-800">Quản lý công việc</h1></div>
+           <div className="hidden md:block text-gray-500 font-medium text-sm">Hệ thống thông tin quản lý nội bộ</div>
+           <div className="flex items-center space-x-4">
+              
+              {/* NÚT THÔNG BÁO */}
+              <div className="relative" ref={notifRef}>
+                <button onClick={() => setIsNotifOpen(!isNotifOpen)} className="p-2 bg-gray-100 hover:bg-gray-200 rounded-full relative transition-colors">
+                  <BellRing className="w-5 h-5 text-gray-700" />
+                  {unreadCount > 0 && (<span className="absolute top-0 right-0 -mt-1 -mr-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border-2 border-white shadow-sm animate-pulse">{unreadCount > 9 ? '9+' : unreadCount}</span>)}
+                </button>
+                
+                {/* BẢNG DROP DOWN THÔNG BÁO */}
+                {isNotifOpen && (
+                  <div className="absolute right-0 mt-3 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden flex flex-col transform transition-all origin-top-right">
+                    <div className="bg-indigo-600 p-4 flex justify-between items-center text-white">
+                      <div className="font-bold flex items-center"><Bell className="w-4 h-4 mr-2" /> Thông báo</div>
+                      {notifications.length > 0 && (<button onClick={() => setNotifications(notifications.map(n => ({...n, read: true})))} className="text-xs flex items-center hover:bg-indigo-700 px-2 py-1 rounded transition-colors"><CheckCheck className="w-3 h-3 mr-1" /> Đã đọc hết</button>)}
+                    </div>
+                    <div className="max-h-[60vh] overflow-y-auto bg-gray-50">
+                      {notifications.length === 0 ? (
+                         <div className="p-8 text-center text-gray-400 flex flex-col items-center"><Bell className="w-10 h-10 mb-2 opacity-20" /><p className="text-sm">Chưa có thông báo nào mới</p></div>
+                      ) : (
+                         <div className="divide-y divide-gray-100">
+                           {notifications.map(notif => (
+                             <div key={notif.id} onClick={() => handleNotifClick(notif)} className={`p-4 hover:bg-indigo-50/50 transition-colors cursor-pointer flex gap-3 ${!notif.read ? 'bg-white' : 'bg-gray-50 opacity-70'}`}>
+                                <div className="shrink-0 mt-1">{notif.type === 'new' ? <div className="bg-green-100 p-2 rounded-full text-green-600"><Plus className="w-4 h-4" /></div> : <div className="bg-blue-100 p-2 rounded-full text-blue-600"><MessageSquare className="w-4 h-4" /></div>}</div>
+                                <div>
+                                  <p className={`text-sm text-gray-800 ${!notif.read ? 'font-bold' : 'font-medium'}`}>{notif.message}</p>
+                                  <p className="text-[11px] text-gray-500 mt-1 flex items-center"><Clock className="w-3 h-3 mr-1" /> {notif.time}</p>
+                                </div>
+                                {!notif.read && <div className="ml-auto flex items-center"><span className="w-2 h-2 bg-indigo-500 rounded-full"></span></div>}
+                             </div>
+                           ))}
+                         </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <button onClick={() => setIsMobileMenuOpen(true)} className="p-1.5 bg-gray-100 rounded-lg text-gray-600 hover:bg-gray-200 transition-transform md:hidden"><Menu className="w-6 h-6" /></button>
+           </div>
+        </div>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
           
@@ -537,7 +545,7 @@ export default function App() {
                     <div className="overflow-auto h-full">
                       <table className="w-full text-left border-collapse min-w-[320px] md:min-w-[800px]">
                         <thead className="sticky top-0 z-20 bg-gray-50 shadow-sm">
-                          <tr className="text-xs md:text-sm font-semibold text-gray-600 border-b border-gray-200"><th className="p-4 whitespace-nowrap bg-gray-50">Nội dung công việc</th><th className="p-4 whitespace-nowrap bg-gray-50">Phân loại</th><th className="p-4 whitespace-nowrap bg-gray-50 hidden md:table-cell">Thời hạn</th><th className="p-4 whitespace-nowrap bg-gray-50 hidden md:table-cell">Phụ trách</th><th className="p-4 whitespace-nowrap bg-gray-50 hidden md:table-cell">Tiến độ</th>{hasPerm('canViewAllGroups') && <th className="p-4 whitespace-nowrap bg-gray-50 hidden md:table-cell">Nhóm</th>}<th className="p-4 text-center whitespace-nowrap bg-gray-50 hidden md:table-cell">Thao tác</th></tr>
+                          <tr className="text-xs md:text-sm font-semibold text-gray-600 border-b border-gray-200"><th className="p-4 whitespace-nowrap bg-gray-50">Nội dung công việc</th><th className="p-4 whitespace-nowrap bg-gray-50">Phân loại</th><th className="p-4 whitespace-nowrap bg-gray-50 hidden md:table-cell">Thời hạn</th><th className="p-4 whitespace-nowrap bg-gray-50 hidden md:table-cell">Phụ trách</th><th className="p-4 whitespace-nowrap bg-gray-50 hidden md:table-cell">Tiến độ</th><th className="p-4 whitespace-nowrap bg-gray-50 hidden lg:table-cell">Báo cáo kết quả</th>{hasPerm('canViewAllGroups') && <th className="p-4 whitespace-nowrap bg-gray-50 hidden md:table-cell">Nhóm</th>}<th className="p-4 text-center whitespace-nowrap bg-gray-50 hidden md:table-cell">Thao tác</th></tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 text-xs md:text-sm">
                           {filteredTasks.length > 0 ? filteredTasks.map((task) => (
@@ -547,10 +555,11 @@ export default function App() {
                               <td className="p-4 text-gray-600 font-medium whitespace-nowrap hidden md:table-cell">{task.thoiHan ? (!isNaN(new Date(task.thoiHan).getTime()) ? new Date(task.thoiHan).toLocaleDateString('vi-VN') : task.thoiHan) : '---'}</td>
                               <td className="p-4 text-gray-800 font-medium hidden md:table-cell"><div className="flex flex-wrap gap-1">{task.nguoiPhuTrach.split(',').map((name, i) => (<span key={i} className="inline-block bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] md:text-xs border border-blue-100 whitespace-nowrap">{name.trim()}</span>))}</div></td>
                               <td className="p-4 hidden md:table-cell"><span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold whitespace-nowrap shadow-sm" style={{ backgroundColor: `${STATUS_COLORS[task.tienDo]}15`, color: STATUS_COLORS[task.tienDo], border: `1px solid ${STATUS_COLORS[task.tienDo]}40` }}>{getStatusIcon(task.tienDo)} {task.tienDo}</span></td>
+                              <td className="p-4 text-gray-600 text-xs hidden lg:table-cell max-w-[250px]"><div className="line-clamp-2" title={task.baoCao}>{task.baoCao || '---'}</div></td>
                               {hasPerm('canViewAllGroups') && (<td className="p-4 hidden md:table-cell"><span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-1 rounded text-[10px] md:text-xs font-bold whitespace-nowrap">{task.nhom}</span></td>)}
                               <td className="p-4 text-center hidden md:table-cell"><div className="flex items-center justify-center space-x-2"><button type="button" onClick={(e) => { e.stopPropagation(); handleOpenForm(task); }} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg"><Edit className="w-4 h-4" /></button>{hasPerm('canDelete') && (<button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }} className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg"><Trash2 className="w-4 h-4" /></button>)}</div></td>
                             </tr>
-                          )) : (<tr><td colSpan="7" className="p-8 text-center text-gray-500">Không tìm thấy công việc nào.</td></tr>)}
+                          )) : (<tr><td colSpan="8" className="p-8 text-center text-gray-500">Không tìm thấy công việc nào.</td></tr>)}
                         </tbody>
                       </table>
                     </div>
@@ -594,7 +603,7 @@ export default function App() {
             </div>
           )}
 
-          {/* QUẢN LÝ TÀI KHOẢN (CẬP NHẬT ĐỂ CHỌN QUYỀN TỪ ROLES LIST) */}
+          {/* QUẢN LÝ TÀI KHOẢN */}
           {activeTab === 'users' && currentUser.role === 'Admin' && (
             <div className="pb-8">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4"><h2 className="text-xl md:text-2xl font-bold text-gray-800">Tài khoản Hệ thống</h2><button onClick={() => handleOpenUserForm()} className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl flex items-center justify-center transition-colors shadow-sm font-medium"><Plus className="w-5 h-5 mr-1" /> Thêm tài khoản</button></div>
@@ -604,6 +613,7 @@ export default function App() {
             </div>
           )}
 
+          {/* QUẢN LÝ NHÓM */}
           {activeTab === 'groups' && currentUser.role === 'Admin' && (
             <div className="pb-8">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4"><h2 className="text-xl md:text-2xl font-bold text-gray-800">Danh mục Nhóm</h2><button onClick={() => handleOpenGroupForm()} className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl flex items-center justify-center transition-colors shadow-sm font-medium"><Plus className="w-5 h-5 mr-1" /> Thêm nhóm</button></div>
@@ -611,12 +621,13 @@ export default function App() {
             </div>
           )}
 
+          {/* CÀI ĐẶT */}
           {activeTab === 'settings' && (
             <div className="pb-8">
               <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-6">{currentUser.role === 'Admin' ? 'Cài đặt Hệ thống' : 'Cài đặt Ứng dụng'}</h2>
               <div className={`grid grid-cols-1 ${currentUser.role === 'Admin' ? 'md:grid-cols-2' : 'max-w-xl'} gap-6`}>
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"><div className="flex items-center space-x-3 mb-4"><div className="bg-green-100 p-2 rounded-lg text-green-600"><Key className="w-6 h-6"/></div><h3 className="text-lg font-bold text-gray-800">Đổi mật khẩu</h3></div>{currentUser.id === 'admin_core' ? (<div className="p-4 bg-amber-50 text-amber-800 rounded-xl text-sm border border-amber-200 font-medium">Admin mặc định không thể đổi tại đây.</div>) : (<form onSubmit={handleChangePassword} className="space-y-4"><div><label className="block text-xs font-bold text-gray-700 mb-1.5">Mật khẩu hiện tại</label><input type="password" required value={passwordForm.current} onChange={e => setPasswordForm({...passwordForm, current: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl outline-none text-sm shadow-sm" /></div><div><label className="block text-xs font-bold text-gray-700 mb-1.5">Mật khẩu mới</label><input type="password" required value={passwordForm.new} onChange={e => setPasswordForm({...passwordForm, new: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl outline-none text-sm shadow-sm" /></div><div><label className="block text-xs font-bold text-gray-700 mb-1.5">Xác nhận</label><input type="password" required value={passwordForm.confirm} onChange={e => setPasswordForm({...passwordForm, confirm: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-xl outline-none text-sm shadow-sm" /></div><button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-4 rounded-xl transition-colors shadow-sm text-sm mt-2">Cập nhật</button></form>)}</div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"><div className="flex items-center space-x-3 mb-4"><div className="bg-purple-100 p-2 rounded-lg text-purple-600"><Bell className="w-6 h-6"/></div><h3 className="text-lg font-bold text-gray-800">Thông báo đẩy</h3></div><button onClick={requestNotificationPermission} className="w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2.5 rounded-xl flex items-center justify-center font-medium text-sm"><Bell className="w-5 h-5 mr-2 text-yellow-500" /> Bật cảnh báo trình duyệt</button></div>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"><div className="flex items-center space-x-3 mb-4"><div className="bg-purple-100 p-2 rounded-lg text-purple-600"><Bell className="w-6 h-6"/></div><h3 className="text-lg font-bold text-gray-800">Thông báo trên thiết bị</h3></div><button onClick={requestNotificationPermission} className="w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2.5 rounded-xl flex items-center justify-center font-medium text-sm"><Bell className="w-5 h-5 mr-2 text-yellow-500" /> Bật cảnh báo trình duyệt (15h)</button></div>
                 {currentUser.role === 'Admin' && (<div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100"><div className="flex items-center space-x-3 mb-4"><div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Save className="w-6 h-6"/></div><h3 className="text-lg font-bold text-gray-800">Cơ sở dữ liệu Sheets</h3></div><div><label className="block text-sm font-medium text-gray-700 mb-2">API URL</label><input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-xl outline-none font-mono text-xs text-gray-600 bg-gray-50" value={sheetUrl} onChange={(e) => setSheetUrl(e.target.value)} /></div></div>)}
               </div>
             </div>
