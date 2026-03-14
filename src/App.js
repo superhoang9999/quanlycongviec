@@ -646,17 +646,42 @@ export default function App() {
                               <td className="p-4 max-w-[200px] md:max-w-xs">
                                 <div className="font-bold text-gray-800 line-clamp-2" title={task.noiDung}>{task.noiDung}</div>
                                 <div className="text-[11px] md:text-xs text-gray-500 line-clamp-2 mt-1" title={task.chiTiet}>{task.chiTiet}</div>
+                                
+                                {/* NÂNG CẤP: Thanh tiến độ trên giao diện Điện thoại */}
                                 {activeTab === 'tasks' && (
-                                   <div className="mt-2 flex flex-wrap gap-2 md:hidden">
+                                   <div className="mt-2 flex flex-col gap-1.5 md:hidden">
                                      <span className="text-[10px] text-gray-600 font-medium flex items-center"><Calendar className="w-3 h-3 mr-1"/>{task.thoiHan || '---'}</span>
-                                     <span className="text-[10px] font-bold" style={{color: STATUS_COLORS[task.tienDo]}}>{task.tienDo} ({task.tyLe}%)</span>
+                                     <div className="flex items-center gap-2 w-full pr-2">
+                                       <span className="text-[10px] font-bold whitespace-nowrap" style={{color: STATUS_COLORS[task.tienDo]}}>{task.tienDo}</span>
+                                       <div className="flex-1 bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                                         <div className="h-full rounded-full transition-all duration-500" style={{ width: `${task.tyLe}%`, backgroundColor: STATUS_COLORS[task.tienDo] }}></div>
+                                       </div>
+                                       <span className="text-[10px] font-bold text-gray-700">{task.tyLe}%</span>
+                                     </div>
                                    </div>
                                 )}
                               </td>
                               <td className="p-4"><span className={`inline-flex items-center px-2 py-1 rounded border whitespace-nowrap shadow-sm text-[10px] md:text-xs font-bold ${CATEGORY_COLORS[task.phanLoai] || 'bg-gray-50 text-gray-700 border-gray-200'}`}>{task.phanLoai}</span></td>
                               {activeTab === 'tasks' && <td className="p-4 text-gray-600 font-medium whitespace-nowrap hidden md:table-cell">{task.thoiHan ? (!isNaN(new Date(task.thoiHan).getTime()) ? new Date(task.thoiHan).toLocaleDateString('vi-VN') : task.thoiHan) : '---'}</td>}
                               <td className="p-4 text-gray-800 font-medium hidden md:table-cell"><div className="flex flex-wrap gap-1">{task.nguoiPhuTrach.split(',').map((name, i) => (<span key={i} className="inline-block bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] md:text-xs border border-blue-100 whitespace-nowrap">{name.trim()}</span>))}</div></td>
-                              {activeTab === 'tasks' && <td className="p-4 hidden md:table-cell"><span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold whitespace-nowrap shadow-sm" style={{ backgroundColor: `${STATUS_COLORS[task.tienDo]}15`, color: STATUS_COLORS[task.tienDo], border: `1px solid ${STATUS_COLORS[task.tienDo]}40` }}>{getStatusIcon(task.tienDo)} {task.tienDo}</span></td>}
+                              
+                              {/* NÂNG CẤP: Thanh tiến độ trên giao diện Máy tính */}
+                              {activeTab === 'tasks' && (
+                                <td className="p-4 hidden md:table-cell min-w-[150px]">
+                                  <div className="flex flex-col space-y-2 w-full">
+                                    <div className="flex justify-between items-center">
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap shadow-sm" style={{ backgroundColor: `${STATUS_COLORS[task.tienDo]}15`, color: STATUS_COLORS[task.tienDo], border: `1px solid ${STATUS_COLORS[task.tienDo]}40` }}>
+                                        {getStatusIcon(task.tienDo)} {task.tienDo}
+                                      </span>
+                                      <span className="text-xs font-bold text-gray-700 ml-2">{task.tyLe}%</span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${task.tyLe}%`, backgroundColor: STATUS_COLORS[task.tienDo] }}></div>
+                                    </div>
+                                  </div>
+                                </td>
+                              )}
+                              
                               <td className="p-4 text-gray-600 text-xs hidden lg:table-cell max-w-[250px]"><div className="line-clamp-2" title={task.baoCao}>{task.baoCao || '---'}</div></td>
                               {hasPerm('canViewAllGroups') && (<td className="p-4 hidden md:table-cell"><span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-1 rounded text-[10px] md:text-xs font-bold whitespace-nowrap">{task.nhom}</span></td>)}
                               <td className="p-4 text-center hidden md:table-cell"><div className="flex items-center justify-center space-x-2"><button type="button" onClick={(e) => { e.stopPropagation(); handleOpenForm(task, activeTab === 'operations' ? 'operation' : 'data'); }} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg"><Edit className="w-4 h-4" /></button>{hasPerm('canDelete') && (<button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id, activeTab === 'operations' ? 'operation' : 'data'); }} className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg"><Trash2 className="w-4 h-4" /></button>)}</div></td>
