@@ -208,6 +208,7 @@ export default function App() {
     return scopeList.filter(t => {
       const matchSearch = t.noiDung.toLowerCase().includes(searchTerm.toLowerCase()) || t.nguoiPhuTrach.toLowerCase().includes(searchTerm.toLowerCase());
       let matchDate = true;
+      // Bộ lọc Tháng/Năm chỉ áp dụng cho KPI có hạn
       if (sourceArray === tasks && filterMonth !== 'all') {
         const targetMonth = parseInt(filterMonth);
         if (!t.thoiHan) { matchDate = false; } else {
@@ -226,7 +227,27 @@ export default function App() {
     });
   };
 
-  const filteredTasks = useMemo(() => applyFilters(tasks), [tasks, currentUser, currentRoleConfig, viewMode, isKpiMode, searchTerm, filterMonth, filterYear, filterGroup]);
+  const filteredTasks = useMemo(() => {
+    const result = applyFilters(tasks);
+    // Sắp xếp các công việc theo Thời hạn (gần nhất lên đầu)
+    return result.sort((a, b) => {
+      if (!a.thoiHan) return 1; // Đẩy các việc không có hạn xuống cuối
+      if (!b.thoiHan) return -1;
+      
+      const dateA = new Date(a.thoiHan);
+      const dateB = new Date(b.thoiHan);
+      const validA = !isNaN(dateA.getTime());
+      const validB = !isNaN(dateB.getTime());
+      
+      if (validA && validB) return dateA.getTime() - dateB.getTime(); // Xếp theo thứ tự ngày tăng dần
+      if (validA) return -1;
+      if (validB) return 1;
+      
+      // Nếu cùng là text như "Hàng ngày", xếp theo bảng chữ cái
+      return a.thoiHan.localeCompare(b.thoiHan);
+    });
+  }, [tasks, currentUser, currentRoleConfig, viewMode, isKpiMode, searchTerm, filterMonth, filterYear, filterGroup]);
+  
   const filteredOperations = useMemo(() => applyFilters(operations), [operations, currentUser, currentRoleConfig, viewMode, isKpiMode, searchTerm, filterGroup]);
 
   const stats = useMemo(() => {
@@ -575,7 +596,7 @@ export default function App() {
                   </div>
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 lg:col-span-2">
-                      <h3 className="text-base md:text-lg font-bold text-gray-800 mb-6 flex items-center"><BarChart2 className="w-5 h-5 mr-2 text-blue-500" /> Thống kê theo tháng (Chỉ tính KPI)</h3>
+                      <h3 className="text-base md:text-lg font-bold text-gray-800 mb-6 flex items-center"><BarChart2 className="w-5 h-5 mr-2 text-blue-500" /> Thống kê theo tháng</h3>
                       <div className="h-64 md:h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={barChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" /><XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#6b7280', fontSize: 12}} /><YAxis axisLine={false} tickLine={false} tick={{fill: '#6b7280', fontSize: 12}} /><Tooltip cursor={{fill: '#f3f4f6'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}} /><Legend wrapperStyle={{paddingTop: '10px', fontSize: 12}} /><Bar dataKey="Hoàn thành" stackId="a" fill="#22c55e" radius={[0, 0, 4, 4]} barSize={20} /><Bar dataKey="Chưa xong" stackId="a" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={20} /></BarChart></ResponsiveContainer></div>
                     </div>
                     <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center">
